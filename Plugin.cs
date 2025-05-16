@@ -2,6 +2,7 @@
 using Dalamud.Plugin;
 using Dalamud.Interface.Windowing;
 using PalaceBuddy.Ui;
+using ECommons;
 
 namespace PalaceBuddy;
 
@@ -14,17 +15,20 @@ public sealed class Plugin : IDalamudPlugin
 
     public static Buddy Buddy { get; private set; } = null!;
     public static LocationLoader LocationLoader { get; private set; } = null!;
+    public static CircleRenderer CircleRenderer { get; private set; } = null!;
 
     public static DebugWindow DebugWindow { get; private set; } = null!;
 
     public Plugin(IDalamudPluginInterface pluginInterface)
     {
         DalamudService.Initialize(pluginInterface);
+        ECommonsMain.Init(pluginInterface, this, Module.SplatoonAPI);
 
         Configuration = DalamudService.PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
         Buddy = new Buddy();
         LocationLoader = new LocationLoader();
+        CircleRenderer = new CircleRenderer();
 
         DebugWindow = new DebugWindow();
         WindowSystem.AddWindow(DebugWindow);
@@ -51,9 +55,11 @@ public sealed class Plugin : IDalamudPlugin
 
         DebugWindow.Dispose();
 
+        CircleRenderer.Dispose();
         Buddy.Dispose();
 
         DalamudService.CommandManager.RemoveHandler(CommandName);
+        ECommonsMain.Dispose();
     }
 
     private static void Draw()

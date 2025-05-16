@@ -1,8 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
+using Dalamud.Plugin.Services;
 using Dalamud.Utility;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using Lumina.Excel.Sheets;
@@ -28,6 +32,7 @@ public class Buddy : IDisposable
     public bool TransferActive => FloorState?.TransferActive ?? false;
     public bool SafetyActive => FloorState?.SafetyActive ?? false;
     public int FloorNumber => FloorState?.FloorNumber ?? -1;
+    public Vector3 _playerPosition { get; private set; }
 
     private readonly Regex _passageRegex;
     private readonly Regex _floorRegex;
@@ -121,10 +126,25 @@ public class Buddy : IDisposable
     {
         if (_disposed || FloorState != null) return;
         DalamudService.Log.Debug("Buddy.Enable");
+        var playerPos = DalamudService.ClientState.LocalPlayer?.Position;
+        if (playerPos.HasValue)
+            _playerPosition = playerPos.Value;
         DalamudService.ChatGui.ChatMessage += OnChatMessage;
+        DalamudService.Framework.Update += OnFrameworkUpdate;
         FloorState = new();
-        CheckMapFloorNow();
+        Plugin.CircleRenderer.EnableRender();
+
+        // Load the trap list and hand it off to the circle renderer
+        var territoryType = DalamudService.ClientState.TerritoryType;
+        Plugin.LocationLoader.GetLocationsForTerritory(territoryType).ContinueWith(task => {
+            var locationList = task.Result;
+            DalamudService.Log.Debug($"Loaded {locationList.Count} locations");
+            if (FloorState == null) return;
+            Plugin.CircleRenderer.SetLocations(locationList, _playerPosition);
+        });
+
         // XXX: After checking the map floor, it may result in Disable() being called immediately
+        CheckMapFloorNow();
     }
 
     public void Disable()
@@ -132,7 +152,9 @@ public class Buddy : IDisposable
         if (FloorState == null) return;
         DalamudService.Log.Debug("Buddy.Disable");
         DalamudService.ChatGui.ChatMessage -= OnChatMessage;
+        DalamudService.Framework.Update -= OnFrameworkUpdate;
         FloorState = null;
+        Plugin.CircleRenderer.DisableRender();
     }
 
     public void Dispose()
@@ -173,6 +195,20 @@ public class Buddy : IDisposable
 
             var passageMatch = _passageRegex.Match(msg);
             if (passageMatch.Success) OnPassageMessage();
+        }
+    }
+
+
+    private void OnFrameworkUpdate(IFramework framework)
+    {
+        var playerPos = DalamudService.ClientState.LocalPlayer?.Position;
+        if (playerPos.HasValue)
+        {
+            if (playerPos != _playerPosition)
+            {
+                _playerPosition = playerPos.Value;
+                Plugin.CircleRenderer.UpdateLocations(_playerPosition);
+            }
         }
     }
 
