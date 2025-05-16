@@ -26,6 +26,7 @@ public class Buddy : IDisposable
 
     private bool _disposed = false;
     private BuddyFloorState? FloorState = null;
+    private List<Vector3>? CachedLocationList = null;
 
     public bool Enabled => FloorState != null;
     public bool PassageActive => FloorState?.PassageActive ?? false;
@@ -137,10 +138,10 @@ public class Buddy : IDisposable
         // Load the trap list and hand it off to the circle renderer
         var territoryType = DalamudService.ClientState.TerritoryType;
         Plugin.LocationLoader.GetLocationsForTerritory(territoryType).ContinueWith(task => {
-            var locationList = task.Result;
-            DalamudService.Log.Debug($"Loaded {locationList.Count} locations");
+            CachedLocationList = task.Result;
+            DalamudService.Log.Debug($"Loaded {CachedLocationList.Count} locations");
             if (FloorState == null) return;
-            Plugin.CircleRenderer.SetLocations(locationList, _playerPosition);
+            Plugin.CircleRenderer.SetLocations(CachedLocationList, _playerPosition);
         });
 
         // XXX: After checking the map floor, it may result in Disable() being called immediately
@@ -154,6 +155,7 @@ public class Buddy : IDisposable
         DalamudService.ChatGui.ChatMessage -= OnChatMessage;
         DalamudService.Framework.Update -= OnFrameworkUpdate;
         FloorState = null;
+        CachedLocationList = null;
         Plugin.CircleRenderer.DisableRender();
     }
 
@@ -247,22 +249,28 @@ public class Buddy : IDisposable
         DalamudService.Log.Debug("Buddy.OnSightMessage");
         // Sight is effectively the same as Safety. Visible traps will be marked by general rules anyway
         OnSafetyMessage();
-        Plugin.CircleRenderer.ClearLocations();
     }
 
     // Floor ##
     private void OnFloorChangeMessage(int floor)
     {
+        if (FloorState == null) return;
         DalamudService.Log.Debug($"Buddy.OnFloorChangeMessage({floor})");
         if (floor == FloorNumber) return;
+        bool wasSafety = FloorState.SafetyActive;
         FloorState = new() { FloorNumber = floor };
-
-        // TODO: Eliminate nearby traps in the home room if possible
 
         // No traps on boss floors
         bool isBossFloor = (floor % 10 == 0) || (DalamudService.ClientState.TerritoryType == (ushort)ETerritoryType.EurekaOrthos_91_100 && floor == 99);
         if (isBossFloor)
+        {
             Disable();
+            return;
+        }
+
+        // Restore hidden trap elements after entering a new floor
+        if (CachedLocationList != null && wasSafety)
+            Plugin.CircleRenderer.SetLocations(CachedLocationList, _playerPosition);
     }
 
     // The ## of Passage is activated!
