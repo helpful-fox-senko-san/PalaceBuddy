@@ -17,7 +17,7 @@ public class DebugWindow : Window, IDisposable
     {
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(300, 300),
+            MinimumSize = new Vector2(300, 100),
         };
     }
 
@@ -33,6 +33,12 @@ public class DebugWindow : Window, IDisposable
             // Check if this child is drawing
             if (child.Success)
             {
+                if (DalamudService.ClientState.LocalPlayer != null)
+                {
+                    var pos = DalamudService.ClientState.LocalPlayer.Position;
+                    ImGui.TextUnformatted($"position {pos.X:0.0000},{pos.Y:0.0000},{pos.Z:0.0000}");
+                }
+
                 // Example for quarrying Lumina directly, getting the name of our current area.
                 var territoryId = DalamudService.ClientState.TerritoryType;
                 if (DalamudService.DataManager.GetExcelSheet<TerritoryType>().TryGetRow(territoryId, out var territoryRow))
@@ -43,6 +49,12 @@ public class DebugWindow : Window, IDisposable
                 {
                     ImGui.TextUnformatted("Invalid territory.");
                 }
+
+                ImGui.TextUnformatted($"Buddy.Enabled: {Plugin.Buddy.Enabled}");
+                ImGui.TextUnformatted($"Buddy.FloorNumber: {Plugin.Buddy.FloorNumber}");
+                ImGui.TextUnformatted($"Buddy.TransferActive: {Plugin.Buddy.TransferActive}");
+                ImGui.TextUnformatted($"Buddy.SafetyActive: {Plugin.Buddy.SafetyActive}");
+                ImGui.TextUnformatted($"Buddy.PassageActive: {Plugin.Buddy.PassageActive}");
             }
         }
     }

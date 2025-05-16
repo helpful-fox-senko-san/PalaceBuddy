@@ -12,6 +12,8 @@ public sealed class Plugin : IDalamudPlugin
     public static Configuration Configuration { get; private set; } = null!;
     public static WindowSystem WindowSystem = new("PalaceBuddy");
 
+    public static Buddy Buddy { get; private set; } = null!;
+
     public static DebugWindow DebugWindow { get; private set; } = null!;
 
     public Plugin(IDalamudPluginInterface pluginInterface)
@@ -19,6 +21,8 @@ public sealed class Plugin : IDalamudPlugin
         DalamudService.Initialize(pluginInterface);
 
         Configuration = DalamudService.PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+
+        Buddy = new Buddy();
 
         DebugWindow = new DebugWindow();
         WindowSystem.AddWindow(DebugWindow);
@@ -33,6 +37,10 @@ public sealed class Plugin : IDalamudPlugin
 
         if (DalamudService.PluginInterface.Reason == PluginLoadReason.Reload)
             DebugWindow.IsOpen = true;
+
+        DalamudService.Framework.RunOnFrameworkThread(() => {
+            Buddy.Initialize();
+        });
     }
 
     public void Dispose()
@@ -40,6 +48,8 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.RemoveAllWindows();
 
         DebugWindow.Dispose();
+
+        Buddy.Dispose();
 
         DalamudService.CommandManager.RemoveHandler(CommandName);
     }
