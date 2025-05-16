@@ -238,6 +238,7 @@ public class Buddy : IDisposable
         DalamudService.Log.Debug("Buddy.OnSafetyMessage");
         // Safety should hide all trap markers
         FloorState.SafetyActive = true;
+        Plugin.CircleRenderer.ClearLocations();
     }
 
     // The map for this floor has been revealed!
@@ -246,6 +247,7 @@ public class Buddy : IDisposable
         DalamudService.Log.Debug("Buddy.OnSightMessage");
         // Sight is effectively the same as Safety. Visible traps will be marked by general rules anyway
         OnSafetyMessage();
+        Plugin.CircleRenderer.ClearLocations();
     }
 
     // Floor ##

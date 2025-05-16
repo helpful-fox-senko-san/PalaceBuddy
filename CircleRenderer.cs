@@ -2,29 +2,47 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Reflection;
 using ECommons.SplatoonAPI;
 
 namespace PalaceBuddy;
 
 public class CircleRenderer : IDisposable
 {
+    private struct TrapElement
+    {
+        public Vector3 Location;
+        public uint Color;
+        public float Thickness;
+    }
+
     private readonly Dictionary<string, List<Element>> _elements = new();
+    private TrapElement[] _trapProperties = [];
     private Element[] _trapElements = [];
 
 #region Element Styling
-    private Element CreateTrapElement(Vector3 Location)
+    private (TrapElement, Element) CreateTrapElement(Vector3 location)
     {
-        return new Element(ElementType.CircleAtFixedCoordinates)
+        var trapElement = new TrapElement()
         {
-            refX = Location.X,
-            refY = Location.Z,
-            refZ = Location.Y,
+            Location = location,
+            Color = 0x9F0000FF,
+            Thickness = 2f
+        };
+
+        var splatoonElement = new Element(ElementType.CircleAtFixedCoordinates)
+        {
+            refX = location.X,
+            refY = location.Z,
+            refZ = location.Y,
 
             Filled = false,
             radius = 1.7f,
-            color = 0x9F0000FF,
-            thicc = 2
+            color = trapElement.Color,
+            thicc = trapElement.Thickness
         };
+
+        return (trapElement, splatoonElement);
     }
 #endregion
 
@@ -45,9 +63,12 @@ public class CircleRenderer : IDisposable
         if (_trapElements.Length > 0)
             Splatoon.RemoveDynamicElements("PalaceBuddy.Traps");
 
+        _trapProperties = new TrapElement[locationList.Count];
         _trapElements = new Element[locationList.Count];
         for (int i = 0; i < locationList.Count; ++i)
-            _trapElements[i] = CreateTrapElement(locationList[i]);
+        {
+            (_trapProperties[i], _trapElements[i]) = CreateTrapElement(locationList[i]);
+        }
 
         if (_trapElements.Length > 0)
             Splatoon.AddDynamicElements("PalaceBuddy.Traps", _trapElements, -2);
@@ -61,18 +82,36 @@ public class CircleRenderer : IDisposable
         for (int i = 0; i < _trapElements.Length; ++i)
         {
             var elem = _trapElements[i];
-            var elemPos = new Vector3(elem.refX, elem.refZ, elem.refY);
+            var elemPos = _trapProperties[i].Location;
+            var elemColor = _trapProperties[i].Color;
+            var elemThickness = _trapProperties[i].Thickness;
             var dist = float.Abs(Vector3.Distance(elemPos, playerPos));
 
-            uint alpha = 0x9F;
-            alpha = ((uint)(alpha * float.Sqrt(1.0f - dist / 40f))) << 24;
-            if (elem.color != 0x00000000)
-                elem.color = (elem.color & 0x00FFFFFF) | alpha;
+            uint newColor = 0x000000FF;
+            float newThickness = 1f;
 
-            elem.thicc = float.Max(1.0f, (1.0f - dist / 60f) * 2.5f);
-            if (elem.thicc < 0f)
-                elem.thicc = 0f;
+            if (dist <= 60f)
+            {
+                uint alpha = 0x9F;
+                alpha = ((uint)(alpha * float.Sqrt(1.0f - dist / 40f))) << 24;
+                newColor = (elemColor & 0x00FFFFFF) | alpha;
+                newThickness = float.Max(1.0f, (1.0f - dist / 60f) * 2.5f);
+            }
+
+            if (elemColor != newColor)
+                elem.color = _trapProperties[i].Color = newColor;
+
+            if (elemThickness != newThickness)
+                elem.thicc = _trapProperties[i].Thickness = newThickness;
         }
+    }
+
+    public void ClearLocations()
+    {
+        if (_trapElements.Length > 0)
+            Splatoon.RemoveDynamicElements("PalaceBuddy.Traps");
+        _trapProperties = [];
+        _trapElements = [];
     }
 
     public void Redraw()
