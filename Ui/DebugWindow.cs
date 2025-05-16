@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Numerics;
+using System.Threading.Tasks;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using ImGuiNET;
@@ -21,7 +22,13 @@ public class DebugWindow : Window, IDisposable
         };
     }
 
-    public void Dispose() { }
+    public void Dispose()
+    {
+        _dbResultTask?.Dispose();
+    }
+
+    private string? _dbResult = null;
+    private Task<string>? _dbResultTask = null;
 
     public override void Draw()
     {
@@ -50,11 +57,37 @@ public class DebugWindow : Window, IDisposable
                     ImGui.TextUnformatted("Invalid territory.");
                 }
 
+                ImGui.Separator();
+
                 ImGui.TextUnformatted($"Buddy.Enabled: {Plugin.Buddy.Enabled}");
                 ImGui.TextUnformatted($"Buddy.FloorNumber: {Plugin.Buddy.FloorNumber}");
                 ImGui.TextUnformatted($"Buddy.TransferActive: {Plugin.Buddy.TransferActive}");
                 ImGui.TextUnformatted($"Buddy.SafetyActive: {Plugin.Buddy.SafetyActive}");
                 ImGui.TextUnformatted($"Buddy.PassageActive: {Plugin.Buddy.PassageActive}");
+
+                ImGui.Separator();
+
+                if (_dbResult == null)
+                {
+                    if (_dbResultTask == null)
+                        _dbResultTask = Plugin.LocationLoader.CheckDB();
+                    if (_dbResultTask.IsCompleted)
+                    {
+                        _dbResult = _dbResultTask.Result;
+                        _dbResultTask.Dispose();
+                        _dbResultTask = null;
+                    }
+                    ImGui.TextUnformatted($"DB check in progress...");
+                }
+                else
+                {
+                    ImGui.TextUnformatted($"DB: {_dbResult}");
+                }
+                using (ImRaii.Disabled(_dbResultTask != null))
+                {
+                    if (ImGui.Button("Check Again"))
+                        _dbResult = null;
+                }
             }
         }
     }

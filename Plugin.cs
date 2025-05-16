@@ -13,6 +13,7 @@ public sealed class Plugin : IDalamudPlugin
     public static WindowSystem WindowSystem = new("PalaceBuddy");
 
     public static Buddy Buddy { get; private set; } = null!;
+    public static LocationLoader LocationLoader { get; private set; } = null!;
 
     public static DebugWindow DebugWindow { get; private set; } = null!;
 
@@ -23,6 +24,7 @@ public sealed class Plugin : IDalamudPlugin
         Configuration = DalamudService.PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
         Buddy = new Buddy();
+        LocationLoader = new LocationLoader();
 
         DebugWindow = new DebugWindow();
         WindowSystem.AddWindow(DebugWindow);
