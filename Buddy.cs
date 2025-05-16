@@ -12,20 +12,22 @@ namespace PalaceBuddy;
 // Every function in this class, except the constructor and Dispose, is expected to be run on the Framework thread
 public class Buddy : IDisposable
 {
-    private bool _enabled = false;
-    private bool _disposed = false;
-    private bool _forceRedraw = false;
-    private bool _passageActive = false;
-    private bool _transferActive = false;
-    private bool _safetyActive = false;
-    private int _floorNumber = 0;
+    private class BuddyFloorState
+    {
+        public bool PassageActive;
+        public bool TransferActive;
+        public bool SafetyActive;
+        public int FloorNumber = -1;
+    }
 
-    // Expose the secret sauce for debugging
-    public bool Enabled => _enabled;
-    public bool PassageActive => _passageActive;
-    public bool TransferActive => _transferActive;
-    public bool SafetyActive => _safetyActive;
-    public int FloorNumber => _floorNumber;
+    private bool _disposed = false;
+    private BuddyFloorState? FloorState = null;
+
+    public bool Enabled => FloorState != null;
+    public bool PassageActive => FloorState?.PassageActive ?? false;
+    public bool TransferActive => FloorState?.TransferActive ?? false;
+    public bool SafetyActive => FloorState?.SafetyActive ?? false;
+    public int FloorNumber => FloorState?.FloorNumber ?? -1;
 
     private readonly Regex _passageRegex;
     private readonly Regex _floorRegex;
@@ -117,19 +119,20 @@ public class Buddy : IDisposable
 
     public void Enable()
     {
-        CheckMapFloorNow();
-        if (_disposed || _enabled) return;
+        if (_disposed || FloorState != null) return;
         DalamudService.Log.Debug("Buddy.Enable");
         DalamudService.ChatGui.ChatMessage += OnChatMessage;
-        _enabled = true;
+        FloorState = new();
+        CheckMapFloorNow();
+        // XXX: After checking the map floor, it may result in Disable() being called immediately
     }
 
     public void Disable()
     {
-        if (!_enabled) return;
+        if (FloorState == null) return;
         DalamudService.Log.Debug("Buddy.Disable");
         DalamudService.ChatGui.ChatMessage -= OnChatMessage;
-        _enabled = false;
+        FloorState = null;
     }
 
     public void Dispose()
@@ -159,8 +162,8 @@ public class Buddy : IDisposable
 
         var msg = message.TextValue;
 
-        /*if (msg == _transferMessage) OnTransferMessage();
-        else */if (msg == _introMessage) OnIntroMessage();
+        if (msg == _transferMessage) OnTransferMessage();
+        else if (msg == _introMessage) OnIntroMessage();
         else if (msg == _safetyMessage) OnSafetyMessage();
         else if (msg == _sightMessage) OnSightMessage();
         else
@@ -176,27 +179,29 @@ public class Buddy : IDisposable
     // Transference initiated!
     private void OnTransferMessage()
     {
+        if (FloorState == null) return;
         DalamudService.Log.Debug("Buddy.OnTransferMessage");
-        _transferActive = true;
+        FloorState.TransferActive = true;
     }
 
     // The current duty uses an independent levelling system.
     private void OnIntroMessage()
     {
+        if (FloorState == null) return;
         DalamudService.Log.Debug("Buddy.OnIntroMessage");
         CheckMapFloorNow();
         // Last chance fallback -- we don't really need the exact floor number anyway
-        if (_floorNumber == -1)
+        if (FloorNumber == -1)
             OnFloorChangeMessage(1);
     }
 
     // All the traps on this floor have disappeared!
     private void OnSafetyMessage()
     {
+        if (FloorState == null) return;
         DalamudService.Log.Debug("Buddy.OnSafetyMessage");
         // Safety should hide all trap markers
-        if (_safetyActive) return;
-        _safetyActive = true;
+        FloorState.SafetyActive = true;
     }
 
     // The map for this floor has been revealed!
@@ -211,20 +216,23 @@ public class Buddy : IDisposable
     private void OnFloorChangeMessage(int floor)
     {
         DalamudService.Log.Debug($"Buddy.OnFloorChangeMessage({floor})");
-        if (floor == _floorNumber) return;
-        _floorNumber = floor;
-        _transferActive = false;
-        _passageActive = false;
-        _safetyActive = false;
+        if (floor == FloorNumber) return;
+        FloorState = new() { FloorNumber = floor };
 
         // TODO: Eliminate nearby traps in the home room if possible
+
+        // No traps on boss floors
+        bool isBossFloor = (floor % 10 == 0) || (DalamudService.ClientState.TerritoryType == (ushort)ETerritoryType.EurekaOrthos_91_100 && floor == 99);
+        if (isBossFloor)
+            Disable();
     }
 
     // The ## of Passage is activated!
     private void OnPassageMessage()
     {
+        if (FloorState == null) return;
         DalamudService.Log.Debug("Buddy.OnPassageMessage");
-        _passageActive = true;
+        FloorState.PassageActive = true;
     }
 
     // TerritoryKind=31 for deep dungeon
