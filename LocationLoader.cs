@@ -24,7 +24,7 @@ public class LocationLoader
         ThreadPool.QueueUserWorkItem(_ => {
             try
             {
-                using var fileStream = File.Open(_trapsFilename, FileMode.Open, FileAccess.Read);
+                using var fileStream = File.Open(_trapsFilename, FileMode.Open, FileAccess.Read, FileShare.Read);
                 using var gzStream = new GZipStream(fileStream, CompressionMode.Decompress);
                 using var reader = new StreamReader(gzStream);
                 int n = 0;
@@ -59,7 +59,7 @@ public class LocationLoader
             try
             {
                 var result = new List<Vector3>();
-                using var fileStream = File.Open(_trapsFilename, FileMode.Open, FileAccess.Read);
+                using var fileStream = File.Open(_trapsFilename, FileMode.Open, FileAccess.Read, FileShare.Read);
                 using var gzStream = new GZipStream(fileStream, CompressionMode.Decompress);
                 using var reader = new StreamReader(gzStream);
                 string? line;
