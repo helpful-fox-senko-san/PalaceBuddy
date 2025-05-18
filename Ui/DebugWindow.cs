@@ -4,7 +4,6 @@ using System.Threading.Tasks;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using ImGuiNET;
-using Lumina.Excel.Sheets;
 
 namespace PalaceBuddy.Ui;
 
@@ -40,30 +39,24 @@ public class DebugWindow : Window, IDisposable
             // Check if this child is drawing
             if (child.Success)
             {
-                if (DalamudService.ClientState.LocalPlayer != null)
+                ImGui.TextUnformatted($"Buddy.Enabled: {Plugin.Buddy.Enabled}");
+                if (Plugin.Buddy.Enabled)
                 {
-                    var pos = DalamudService.ClientState.LocalPlayer.Position;
-                    ImGui.TextUnformatted($"position {pos.X:0.0000},{pos.Y:0.0000},{pos.Z:0.0000}");
-                }
+                    var pos = Plugin.Buddy.PlayerPosition;
+                    ImGui.TextUnformatted($"PlayerPosition {pos.X:0.0000},{pos.Y:0.0000},{pos.Z:0.0000}");
+                    ImGui.TextUnformatted($"FloorNumber: {Plugin.Buddy.FloorNumber}");
 
-                // Example for quarrying Lumina directly, getting the name of our current area.
-                var territoryId = DalamudService.ClientState.TerritoryType;
-                if (DalamudService.DataManager.GetExcelSheet<TerritoryType>().TryGetRow(territoryId, out var territoryRow))
-                {
-                    ImGui.TextUnformatted($"We are currently in ({territoryId}) \"{territoryRow.PlaceName.Value.Name.ExtractText()}\"");
-                }
-                else
-                {
-                    ImGui.TextUnformatted("Invalid territory.");
+                    ImGui.TextUnformatted($"SafetyActive: {Plugin.Buddy.SafetyActive}");
+
+                    ImGui.TextUnformatted($"LastGoldCofferTargetId: {Plugin.Buddy.LastGoldCofferTargetId:X}");
+                    ImGui.TextUnformatted($"LastSilverCofferTargetId: {Plugin.Buddy.LastSilverCofferTargetId:X}");
+
                 }
 
                 ImGui.Separator();
 
-                ImGui.TextUnformatted($"Buddy.Enabled: {Plugin.Buddy.Enabled}");
-                ImGui.TextUnformatted($"Buddy.FloorNumber: {Plugin.Buddy.FloorNumber}");
-                ImGui.TextUnformatted($"Buddy.TransferActive: {Plugin.Buddy.TransferActive}");
-                ImGui.TextUnformatted($"Buddy.SafetyActive: {Plugin.Buddy.SafetyActive}");
-                ImGui.TextUnformatted($"Buddy.PassageActive: {Plugin.Buddy.PassageActive}");
+                ImGui.TextUnformatted($"# Trap Elements: {Plugin.CircleRenderer.NumTrapElements}");
+                ImGui.TextUnformatted($"# Active Labels: {Plugin.CircleRenderer.NumActiveLabels}");
 
                 ImGui.Separator();
 

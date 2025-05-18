@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Plugin.Services;
@@ -22,6 +21,11 @@ public class Buddy : IDisposable
         public bool TransferActive;
         public bool SafetyActive;
         public int FloorNumber = -1;
+        public bool Solo = DalamudService.PartyList.Length < 2;
+
+        public ulong LastSilverCofferTargetId = 0;
+        public ulong LastGoldCofferTargetId = 0;
+        public ulong CurrentTargetId = 0;
     }
 
     private bool _disposed = false;
@@ -33,7 +37,9 @@ public class Buddy : IDisposable
     public bool TransferActive => FloorState?.TransferActive ?? false;
     public bool SafetyActive => FloorState?.SafetyActive ?? false;
     public int FloorNumber => FloorState?.FloorNumber ?? -1;
-    public Vector3 _playerPosition { get; private set; }
+    public Vector3 PlayerPosition => _playerPosition;
+    public uint LastSilverCofferTargetId => (uint)(FloorState?.LastSilverCofferTargetId ?? 0);
+    public uint LastGoldCofferTargetId => (uint)(FloorState?.LastGoldCofferTargetId ?? 0);
 
     private readonly Regex _passageRegex;
     private readonly Regex _floorRegex;
@@ -41,6 +47,11 @@ public class Buddy : IDisposable
     private readonly string _transferMessage;
     private readonly string _safetyMessage;
     private readonly string _sightMessage;
+    private readonly Regex _fullRegex;
+    private readonly string[] _goldItemNames;
+    private readonly string[] _silverItemNames;
+
+    private Vector3 _playerPosition;
 
     private const ushort DeepDungeonChatTypeId = 2105; // XivChatType
 
@@ -50,6 +61,11 @@ public class Buddy : IDisposable
     private const int IntroLogMessageId = 7249; // The current duty uses an independent levelling system.
     private const int SafetyLogMessageId = 7255; // All the traps on this floor have disappeared!
     private const int SightLogMessageId = 7256; // The map for this floor has been revealed!
+
+    // These three messages are probably identical in every language but I didn't check
+    private const int PomanderFullMessageId = 7222; // You return the ### to the coffer.
+    //private const int MagiciteFullMessageId = 9208; // You return the ### to the coffer.
+    //private const int DemicloneFullMessageId = 10287; // You return the ### to the coffer.
 
     // There's no need for this data since the log message is only used for passage objects anyway
     //private readonly static int[] PassageEObjIds = [2007188, 2009507, 2013287];
@@ -113,6 +129,47 @@ public class Buddy : IDisposable
         _introMessage = LogMessageSheet.GetRow(IntroLogMessageId).Text.ExtractText();
         _safetyMessage = LogMessageSheet.GetRow(SafetyLogMessageId).Text.ExtractText();
         _sightMessage = LogMessageSheet.GetRow(SightLogMessageId).Text.ExtractText();
+
+        var fullSeString = LogMessageSheet.GetRow(PomanderFullMessageId).Text.ToDalamudString();
+        var fullRegex = "";
+        foreach (var payload in fullSeString.Payloads)
+        {
+            fullRegex += payload switch
+            {
+                ITextProvider text => text.Text,
+                _ => "(.+?)"
+            };
+        }
+        _fullRegex = new($"^{fullRegex}$");
+
+        // Deep Dungeon tem names
+        var DeepDungeonItem = DalamudService.DataManager.GetExcelSheet<DeepDungeonItem>();
+        var DeepDungeonMagicStone = DalamudService.DataManager.GetExcelSheet<DeepDungeonMagicStone>();
+        var DeepDungeonDemiclone = DalamudService.DataManager.GetExcelSheet<DeepDungeonDemiclone>();
+
+        List<string> goldNames = new();
+        List<string> silverNames = new();
+
+        foreach (var item in DeepDungeonItem)
+        {
+            if (item.Icon != 0)
+                goldNames.Add(item.Singular.ToDalamudString().TextValue.ToLower());
+        }
+
+        foreach (var item in DeepDungeonMagicStone)
+        {
+            if (item.Icon != 0)
+                silverNames.Add(item.Singular.ToDalamudString().TextValue.ToLower());
+        }
+
+        foreach (var item in DeepDungeonDemiclone)
+        {
+            if (item.Icon != 0)
+                silverNames.Add(item.Singular.ToDalamudString().TextValue.ToLower());
+        }
+
+        _goldItemNames = goldNames.ToArray();
+        _silverItemNames = silverNames.ToArray();
 
         DalamudService.ClientState.TerritoryChanged += OnTerritoryChanged;
     }
@@ -197,20 +254,43 @@ public class Buddy : IDisposable
 
             var passageMatch = _passageRegex.Match(msg);
             if (passageMatch.Success) OnPassageMessage();
+
+            var fullMatch = _fullRegex.Match(msg);
+            if (fullMatch.Success && fullMatch.Groups.Count >= 2) OnFullMessage(fullMatch.Groups[1].Value);
         }
     }
 
 
     private void OnFrameworkUpdate(IFramework framework)
     {
-        var playerPos = DalamudService.ClientState.LocalPlayer?.Position;
-        if (playerPos.HasValue)
+        if (DalamudService.ClientState.LocalPlayer == null) return;
+        if (FloorState == null) return;
+
+        var localPlayer = DalamudService.ClientState.LocalPlayer!;
+
+        var targetId = localPlayer.TargetObjectId;
+        var target = localPlayer.TargetObject;
+
+        if (targetId != FloorState.CurrentTargetId)
         {
-            if (playerPos != _playerPosition)
+            FloorState.CurrentTargetId = targetId;
+            if (target != null && target.DataId == 2007358) // Gold coffer
             {
-                _playerPosition = playerPos.Value;
-                Plugin.CircleRenderer.UpdateLocations(_playerPosition);
+                DalamudService.Log.Debug("LastGoldCofferTargetId = {id}", targetId);
+                FloorState.LastGoldCofferTargetId = targetId;
             }
+            else if (target != null && target.DataId == 2007357) // Silver coffer
+            {
+                DalamudService.Log.Debug("LastSilverCofferTargetId = {id}", targetId);
+                FloorState.LastSilverCofferTargetId = targetId;
+            }
+        }
+
+        var playerPos = localPlayer.Position;
+        if (playerPos != _playerPosition)
+        {
+            _playerPosition = playerPos;
+            Plugin.CircleRenderer.UpdateLocations(_playerPosition);
         }
     }
 
@@ -259,6 +339,7 @@ public class Buddy : IDisposable
         if (floor == FloorNumber) return;
         bool wasSafety = FloorState.SafetyActive;
         FloorState = new() { FloorNumber = floor };
+        Plugin.CircleRenderer.RemoveTemporaryElements();
 
         // No traps on boss floors
         bool isBossFloor = (floor % 10 == 0) || (DalamudService.ClientState.TerritoryType == (ushort)ETerritoryType.EurekaOrthos_91_100 && floor == 99);
@@ -279,6 +360,49 @@ public class Buddy : IDisposable
         if (FloorState == null) return;
         DalamudService.Log.Debug("Buddy.OnPassageMessage");
         FloorState.PassageActive = true;
+    }
+
+    // Clean up an item name -- assumes English
+    private string FormatItemName(string itemName)
+    {
+        if (itemName.StartsWith("pomander of "))
+            itemName = itemName[12..];
+        else if (itemName.StartsWith("protomander of "))
+            itemName = itemName[15..];
+        else if (itemName.EndsWith("elder magicite"))
+            itemName = "elder magicite";
+        else if (itemName.EndsWith("magicite"))
+            itemName = "magicite";
+        else if (itemName.EndsWith(" demiclone"))
+            itemName = itemName[..^10];
+
+        return itemName.FirstCharToUpper();
+    }
+
+    // You return the pomander of ## to the coffer.
+    private void OnFullMessage(string itemName)
+    {
+        if (FloorState == null) return;
+        // Can't reliably correlate chat messages to chests in parties
+        if (!FloorState.Solo) return;
+        DalamudService.Log.Debug("Buddy.OnFullMessage");
+
+        uint chestToMark = 0;
+
+        string lowerItemName = itemName.ToLower();
+
+        if (_goldItemNames.Any(x => x == lowerItemName))
+            chestToMark = (uint)FloorState.LastGoldCofferTargetId;
+
+        if (_silverItemNames.Any(x => x == lowerItemName))
+            chestToMark = (uint)FloorState.LastSilverCofferTargetId;
+
+        if (chestToMark != 0)
+        {
+            string formattedName = FormatItemName(itemName);
+            DalamudService.Log.Debug("Marking chest {id} with {name}", chestToMark, formattedName);
+            Plugin.CircleRenderer.AddChestLabel(chestToMark, formattedName);
+        }
     }
 
     // TerritoryKind=31 for deep dungeon

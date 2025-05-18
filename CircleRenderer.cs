@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
-using System.Reflection;
 using ECommons.SplatoonAPI;
 
 namespace PalaceBuddy;
@@ -19,6 +17,10 @@ public class CircleRenderer : IDisposable
     private readonly Dictionary<string, List<Element>> _elements = new();
     private TrapElement[] _trapProperties = [];
     private Element[] _trapElements = [];
+    private readonly List<uint> _activeLabels = new();
+
+    public int NumTrapElements => _trapElements.Length;
+    public int NumActiveLabels => _activeLabels.Count;
 
 #region Element Styling
     private (TrapElement, Element) CreateTrapElement(Vector3 location)
@@ -44,6 +46,27 @@ public class CircleRenderer : IDisposable
 
         return (trapElement, splatoonElement);
     }
+
+    private Element CreateChestLabelElement(uint objectId, string labelText)
+    {
+        return new Element(ElementType.CircleRelativeToActorPosition)
+        {
+            refActorType = RefActorType.IGameObjectWithSpecifiedAttribute,
+            refActorComparisonType = RefActorComparisonType.ObjectID,
+            refActorObjectID = objectId,
+            onlyTargetable = true,
+
+            overlayText = labelText,
+            overlayTextColor = 0xFFAFEFFF,
+            overlayBGColor = 0x80000000,
+            overlayVOffset = 1.4f,
+
+            Filled = false,
+            radius = 0,
+            color = 0,
+            thicc = 0
+        };
+    }
 #endregion
 
     public void EnableRender()
@@ -54,7 +77,6 @@ public class CircleRenderer : IDisposable
     public void DisableRender()
     {
         RemoveAllElements();
-        _elements.Clear();
     }
 
     // Create the trap elements after loading locations from the database
@@ -114,6 +136,20 @@ public class CircleRenderer : IDisposable
         _trapElements = [];
     }
 
+    public void AddChestLabel(uint objectId, string labelText)
+    {
+        if (_activeLabels.Contains(objectId)) return;
+
+        if (!_elements.ContainsKey("ChestLabel"))
+            _elements.Add("ChestLabel", new());
+
+        DalamudService.Log.Debug("adding element");
+        var elem = CreateChestLabelElement(objectId, labelText);
+        _elements["ChestLabel"].Add(elem);
+        Splatoon.AddDynamicElement("PalaceBuddy.ChestLabel", elem, -2);
+        _activeLabels.Add(objectId);
+    }
+
     public void Redraw()
     {
     }
@@ -123,12 +159,20 @@ public class CircleRenderer : IDisposable
         RemoveAllElements();
     }
 
+    public void RemoveTemporaryElements()
+    {
+        foreach (var elem in _elements)
+            Splatoon.RemoveDynamicElements($"PalaceBuddy.{elem.Key}");
+
+        _elements.Clear();
+        _activeLabels.Clear();
+    }
+
     private void RemoveAllElements()
     {
         if (_trapElements.Length > 0)
             Splatoon.RemoveDynamicElements("PalaceBuddy.Traps");
 
-        foreach (var elem in _elements)
-            Splatoon.RemoveDynamicElements($"PalaceBuddy.{elem.Key}");
+        RemoveTemporaryElements();
     }
 }
