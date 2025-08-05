@@ -79,7 +79,7 @@ public class Buddy : IDisposable
 
     private unsafe static (bool, int) MapFloorNumber()
     {
-        var addon = (AtkUnitBase*)DalamudService.GameGui?.GetAddonByName("DeepDungeonMap", 1)!;
+        var addon = (AtkUnitBase*)DalamudService.GameGui.GetAddonByName("DeepDungeonMap", 1).Address;
         if (addon == null)
             return (false, -1);
 
