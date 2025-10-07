@@ -342,7 +342,9 @@ public class Buddy : IDisposable
         Plugin.CircleRenderer.RemoveTemporaryElements();
 
         // No traps on boss floors
-        bool isBossFloor = (floor % 10 == 0) || (DalamudService.ClientState.TerritoryType == (ushort)ETerritoryType.EurekaOrthos_91_100 && floor == 99);
+        bool isBossFloor = (floor % 10 == 0)
+            || (DalamudService.ClientState.TerritoryType == (ushort)ETerritoryType.EurekaOrthos_91_100 && floor == 99)
+            || (DalamudService.ClientState.TerritoryType == (ushort)ETerritoryType.PilgrimsTraverse_91_100 && floor == 99);
         if (isBossFloor)
         {
             Disable();
@@ -375,6 +377,8 @@ public class Buddy : IDisposable
             itemName = "magicite";
         else if (itemName.EndsWith(" demiclone"))
             itemName = itemName[..^10];
+        else if (itemName.StartsWith("piece of "))
+            itemName = itemName[9..];
 
         return itemName.FirstCharToUpper();
     }
