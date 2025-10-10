@@ -43,13 +43,16 @@ public class Buddy : IDisposable
 
     private readonly Regex _passageRegex;
     private readonly Regex _floorRegex;
+    private readonly Regex _floorRegexPT;
     private readonly string _introMessage;
     private readonly string _transferMessage;
-    private readonly string _safetyMessage;
-    private readonly string _sightMessage;
+    private readonly Regex _safetyRegex;
+    private readonly Regex _sightRegex;
+    private readonly Regex _incenseRegex;
     private readonly Regex _fullRegex;
     private readonly string[] _goldItemNames;
     private readonly string[] _silverItemNames;
+    private readonly string _mazerootSingular;
 
     private Vector3 _playerPosition;
 
@@ -57,10 +60,12 @@ public class Buddy : IDisposable
 
     private const int PassageLogMessageId = 7245; // The ### is activated!
     private const int FloorLogMessageId = 7270; // Floor ##
+    private const int FloorPTLogMessageId = 7290; // You pass traverse stone ##...
     private const int TransferLogMessageId = 7248; // Transference initiated!
     private const int IntroLogMessageId = 7249; // The current duty uses an independent levelling system.
-    private const int SafetyLogMessageId = 7255; // All the traps on this floor have disappeared!
-    private const int SightLogMessageId = 7256; // The map for this floor has been revealed!
+    private const int SafetyLogMessageId = 7255; // All the traps ## this ## have disappeared!
+    private const int SightLogMessageId = 7256; // The map for this ## has been revealed!
+    private const int IncenseLogMessageId = 11250; // ### to summon the faerie king!
 
     // These three messages are probably identical in every language but I didn't check
     private const int PomanderFullMessageId = 7222; // You return the ### to the coffer.
@@ -68,9 +73,9 @@ public class Buddy : IDisposable
     //private const int DemicloneFullMessageId = 10287; // You return the ### to the coffer.
 
     // There's no need for this data since the log message is only used for passage objects anyway
-    //private readonly static int[] PassageEObjIds = [2007188, 2009507, 2013287];
+    //private readonly static int[] PassageEObjIds = [2007188, 2009507, 2013287, 2014756];
     // Tracking activation traps by their activation message won't work well in a party context + because of latency
-    //private readonly static int[] TrapLogMessageIds = [7224, 7225, 7226, 7227, 7228, 9210, 10278];
+    //private readonly static int[] TrapLogMessageIds = [7224, 7225, 7226, 7227, 7228, 9210, 10278, 11247];
 
     private readonly static ETerritoryType[] DDTerritoryTypes = Enum.GetValues<ETerritoryType>();
 
@@ -125,10 +130,65 @@ public class Buddy : IDisposable
         }
         _floorRegex = new($"^{floorRegex}$");
 
+        var floorSeStringPT = LogMessageSheet.GetRow(FloorPTLogMessageId).Text.ToDalamudString();
+        var floorRegexPT = "";
+        foreach (var payload in floorSeStringPT.Payloads)
+        {
+            floorRegexPT += payload switch
+            {
+                ITextProvider text => text.Text,
+                _ => "(\\d+?)"
+            };
+        }
+        _floorRegexPT = new($"^{floorRegexPT}$");
+
         _transferMessage = LogMessageSheet.GetRow(TransferLogMessageId).Text.ExtractText();
         _introMessage = LogMessageSheet.GetRow(IntroLogMessageId).Text.ExtractText();
-        _safetyMessage = LogMessageSheet.GetRow(SafetyLogMessageId).Text.ExtractText();
-        _sightMessage = LogMessageSheet.GetRow(SightLogMessageId).Text.ExtractText();
+
+        var safetySeString = LogMessageSheet.GetRow(SafetyLogMessageId).Text.ToDalamudString();
+        var safetyRegex = "";
+        foreach (var payload in safetySeString.Payloads)
+        {
+            safetyRegex += payload switch
+            {
+                ITextProvider text => text.Text,
+                _ => "(.+?)"
+            };
+        }
+        _safetyRegex = new($"^{safetyRegex}$");
+
+        var sightSeString = LogMessageSheet.GetRow(SightLogMessageId).Text.ToDalamudString();
+        var sightRegex = "";
+
+        foreach (var payload in sightSeString.Payloads)
+        {
+            sightRegex += payload switch
+            {
+                ITextProvider text => text.Text,
+                _ => "(.+?)"
+            };
+        }
+        _sightRegex = new($"^{sightRegex}$");
+
+        var incenseSeString = LogMessageSheet.GetRow(IncenseLogMessageId).Text.ToDalamudString();
+        var incenseRegex = "";
+        var incenseFirstPayload = true;
+        foreach (var payload in incenseSeString.Payloads)
+        {
+            // Drop the first payload which resolves to a string like "You burn a"
+            if (incenseFirstPayload)
+            {
+                incenseFirstPayload = false;
+                continue;
+            }
+
+            incenseRegex += payload switch
+            {
+                ITextProvider text => text.Text,
+                _ => "(.+?)"
+            };
+        }
+        _incenseRegex = new($"{incenseRegex}$");
 
         var fullSeString = LogMessageSheet.GetRow(PomanderFullMessageId).Text.ToDalamudString();
         var fullRegex = "";
@@ -166,6 +226,8 @@ public class Buddy : IDisposable
         {
             if (item.Icon != 0)
                 silverNames.Add(item.Singular.ToDalamudString().TextValue.ToLower());
+            if (item.RowId == 4)
+                _mazerootSingular = item.Singular.ToDalamudString().TextValue.ToLower();
         }
 
         _goldItemNames = goldNames.ToArray();
@@ -245,15 +307,23 @@ public class Buddy : IDisposable
 
         if (msg == _transferMessage) OnTransferMessage();
         else if (msg == _introMessage) OnIntroMessage();
-        else if (msg == _safetyMessage) OnSafetyMessage();
-        else if (msg == _sightMessage) OnSightMessage();
         else
         {
             var floorMatch = _floorRegex.Match(msg);
+            if (!floorMatch.Success) floorMatch = _floorRegexPT.Match(msg);
             if (floorMatch.Success && floorMatch.Groups.Count >= 2) OnFloorChangeMessage(int.Parse(floorMatch.Groups[1].ValueSpan));
 
             var passageMatch = _passageRegex.Match(msg);
             if (passageMatch.Success) OnPassageMessage();
+
+            var safetyMatch = _safetyRegex.Match(msg);
+            if (safetyMatch.Success) OnSafetyMessage();
+
+            var sightMatch = _sightRegex.Match(msg);
+            if (sightMatch.Success) OnSightMessage();
+
+            var incenseMatch = _incenseRegex.Match(msg);
+            if (incenseMatch.Success && incenseMatch.Groups.Count >= 2) OnIncenseMessage(incenseMatch.Groups[1].Value);
 
             var fullMatch = _fullRegex.Match(msg);
             if (fullMatch.Success && fullMatch.Groups.Count >= 2) OnFullMessage(fullMatch.Groups[1].Value);
@@ -381,6 +451,17 @@ public class Buddy : IDisposable
             itemName = itemName[9..];
 
         return itemName.FirstCharToUpper();
+    }
+
+    // ## to summon the faerie king!
+    private void OnIncenseMessage(string incenseText)
+    {
+        if (FloorState == null) return;
+        DalamudService.Log.Debug("Buddy.OnIncenseMessage");
+
+        // Mazeroot has the same effect as sight
+        if (incenseText.Contains(_mazerootSingular, StringComparison.OrdinalIgnoreCase))
+            OnSightMessage();
     }
 
     // You return the pomander of ## to the coffer.
