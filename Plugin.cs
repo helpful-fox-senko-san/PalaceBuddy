@@ -16,6 +16,7 @@ public sealed class Plugin : IDalamudPlugin
     public static Buddy Buddy { get; private set; } = null!;
     public static LocationLoader LocationLoader { get; private set; } = null!;
     public static CircleRenderer CircleRenderer { get; private set; } = null!;
+    public static GameScanner GameScanner { get; private set; } = null!;
 
     public static DebugWindow DebugWindow { get; private set; } = null!;
 
@@ -29,6 +30,7 @@ public sealed class Plugin : IDalamudPlugin
         Buddy = new Buddy();
         LocationLoader = new LocationLoader();
         CircleRenderer = new CircleRenderer();
+        GameScanner = new GameScanner();
 
         DebugWindow = new DebugWindow();
         WindowSystem.AddWindow(DebugWindow);

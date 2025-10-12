@@ -46,6 +46,7 @@ public class Buddy : IDisposable
     private readonly Regex _floorRegexPT;
     private readonly string _introMessage;
     private readonly string _transferMessage;
+    private readonly string[] _trapMessages;
     private readonly Regex _safetyRegex;
     private readonly Regex _sightRegex;
     private readonly Regex _incenseRegex;
@@ -73,16 +74,23 @@ public class Buddy : IDisposable
     //private const int DemicloneFullMessageId = 10287; // You return the ### to the coffer.
 
     // There's no need for this data since the log message is only used for passage objects anyway
-    //private readonly static int[] PassageEObjIds = [2007188, 2009507, 2013287, 2014756];
-    // Tracking activation traps by their activation message won't work well in a party context + because of latency
-    //private readonly static int[] TrapLogMessageIds = [7224, 7225, 7226, 7227, 7228, 9210, 10278, 11247];
+    //private static readonly uint[] PassageDataIds = [2007188, 2009507, 2013287, 2014756];
+    // Other data just in case I want to use it later
+    //private static readonly uint[] HoardDataIds = [2007542, 2007543];
+    //private const uint VotiveDataId = 2014759;
+    private static readonly uint[] TrapLogMessageIds = [7224, 7225, 7226, 7227, 7228, 9210, 10278, 11247];
 
-    private readonly static ETerritoryType[] DDTerritoryTypes = Enum.GetValues<ETerritoryType>();
+    private const uint SilverCofferDataId = 2007357;
+    private const uint GoldCofferDataId = 2007358;
+
+    private static readonly uint[] TrapDataIds = [2007182, 2007183, 2007184, 2007185, 2007186, 2009504, 2013284, 2014939];
+
+    private static readonly ETerritoryType[] DDTerritoryTypes = Enum.GetValues<ETerritoryType>();
 
     // DeepDungeonTracker/Common/NodeUtility.cs
-    private readonly static Regex NumberRegex = new Regex("\\d+");
+    private static readonly Regex NumberRegex = new Regex("\\d+");
 
-    private unsafe static (bool, int) MapFloorNumber()
+    private static unsafe (bool, int) MapFloorNumber()
     {
         var addon = (AtkUnitBase*)DalamudService.GameGui.GetAddonByName("DeepDungeonMap", 1).Address;
         if (addon == null)
@@ -144,6 +152,12 @@ public class Buddy : IDisposable
 
         _transferMessage = LogMessageSheet.GetRow(TransferLogMessageId).Text.ExtractText();
         _introMessage = LogMessageSheet.GetRow(IntroLogMessageId).Text.ExtractText();
+
+        _trapMessages = new string[TrapDataIds.Length];
+        for (int i = 0; i < _trapMessages.Length; ++i)
+        {
+            _trapMessages[i] = LogMessageSheet.GetRow(TrapLogMessageIds[i]).Text.ExtractText();
+        }
 
         var safetySeString = LogMessageSheet.GetRow(SafetyLogMessageId).Text.ToDalamudString();
         var safetyRegex = "";
@@ -230,6 +244,8 @@ public class Buddy : IDisposable
                 _mazerootSingular = item.Singular.ToDalamudString().TextValue.ToLower();
         }
 
+        _mazerootSingular ??= "piece of mazeroot incense";
+
         _goldItemNames = goldNames.ToArray();
         _silverItemNames = silverNames.ToArray();
 
@@ -307,6 +323,7 @@ public class Buddy : IDisposable
 
         if (msg == _transferMessage) OnTransferMessage();
         else if (msg == _introMessage) OnIntroMessage();
+        else if (_trapMessages.Contains(msg, StringComparer.Ordinal)) OnTrapMessage();
         else
         {
             var floorMatch = _floorRegex.Match(msg);
@@ -330,7 +347,6 @@ public class Buddy : IDisposable
         }
     }
 
-
     private void OnFrameworkUpdate(IFramework framework)
     {
         if (DalamudService.ClientState.LocalPlayer == null) return;
@@ -344,16 +360,10 @@ public class Buddy : IDisposable
         if (targetId != FloorState.CurrentTargetId)
         {
             FloorState.CurrentTargetId = targetId;
-            if (target != null && target.DataId == 2007358) // Gold coffer
-            {
-                DalamudService.Log.Debug("LastGoldCofferTargetId = {id}", targetId);
+            if (target != null && target.BaseId == GoldCofferDataId) // Gold coffer
                 FloorState.LastGoldCofferTargetId = targetId;
-            }
-            else if (target != null && target.DataId == 2007357) // Silver coffer
-            {
-                DalamudService.Log.Debug("LastSilverCofferTargetId = {id}", targetId);
+            else if (target != null && target.BaseId == SilverCofferDataId) // Silver coffer
                 FloorState.LastSilverCofferTargetId = targetId;
-            }
         }
 
         var playerPos = localPlayer.Position;
@@ -361,6 +371,23 @@ public class Buddy : IDisposable
         {
             _playerPosition = playerPos;
             Plugin.CircleRenderer.UpdateLocations(_playerPosition);
+        }
+
+        foreach (var trap in Plugin.GameScanner.FindNewTraps(DalamudService.Framework, TrapDataIds))
+        {
+            if (CachedLocationList != null && !CachedLocationList.Contains(trap.Position))
+            {
+                var tt = DalamudService.ClientState.TerritoryType;
+                var x = trap.Position.X;
+                var y = trap.Position.Y;
+                var z = trap.Position.Z;
+#if DEBUG
+                DalamudService.ToastGui.ShowQuest("New trap location");
+                DalamudService.ChatGui.Print($"Location: {tt}, {x}, {y}, {z}");
+#endif
+                DalamudService.Log.Information("New trap location: {tt}, {x}, {y}, {z}", tt, x, y, z);
+            }
+            Plugin.CircleRenderer.AddLocation(trap.Position, playerPos);
         }
     }
 
@@ -424,6 +451,8 @@ public class Buddy : IDisposable
         // Restore hidden trap elements after entering a new floor
         if (CachedLocationList != null && wasSafety)
             Plugin.CircleRenderer.SetLocations(CachedLocationList, _playerPosition);
+
+        Plugin.GameScanner.ClearSeenTraps();
     }
 
     // The ## of Passage is activated!
@@ -462,6 +491,20 @@ public class Buddy : IDisposable
         // Mazeroot has the same effect as sight
         if (incenseText.Contains(_mazerootSingular, StringComparison.OrdinalIgnoreCase))
             OnSightMessage();
+    }
+
+    // The ### is triggered...
+    private void OnTrapMessage()
+    {
+        if (FloorState == null) return;
+        DalamudService.Log.Debug("Buddy.OnTrapMessage");
+
+        // Force re-creation of all temporary trap elements, so the one that just popped goes away
+        DalamudService.Framework.RunOnTick(() =>
+        {
+            Plugin.CircleRenderer.RemoveTemporaryTraps();
+            Plugin.GameScanner.ClearSeenTraps();
+        }, TimeSpan.FromSeconds(5));
     }
 
     // You return the pomander of ## to the coffer.

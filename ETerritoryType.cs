@@ -1,5 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace PalaceBuddy;
 
 // PalacePal/Pal.Common/ETerritoryType.cs

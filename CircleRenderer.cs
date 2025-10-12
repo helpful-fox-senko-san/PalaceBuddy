@@ -14,7 +14,9 @@ public class CircleRenderer : IDisposable
         public float Thickness;
     }
 
-    private readonly Dictionary<string, List<Element>> _elements = new();
+    private readonly Dictionary<string, List<Element>> _elements = new(4);
+    private readonly List<(TrapElement Props, Element Elem)> _dynamicTraps = new(4);
+
     private TrapElement[] _trapProperties = [];
     private Element[] _trapElements = [];
     private readonly List<uint> _activeLabels = new();
@@ -98,34 +100,53 @@ public class CircleRenderer : IDisposable
         UpdateLocations(playerPos);
     }
 
+    // Create a new trap element dynamically, as visible ones are loaded in to view
+    public void AddLocation(Vector3 location, Vector3 playerPos)
+    {
+        var (prop, elem) = CreateTrapElement(location);
+        Splatoon.AddDynamicElement("PalaceBuddy.DynamicTraps", elem, -2);
+        prop = UpdateSingleLocation(playerPos, prop, elem);
+        _dynamicTraps.Add((prop, elem));
+    }
+
     // Update the appearance of trap indicators based on the player position
     public void UpdateLocations(Vector3 playerPos)
     {
         for (int i = 0; i < _trapElements.Length; ++i)
+            _trapProperties[i] = UpdateSingleLocation(playerPos, _trapProperties[i], _trapElements[i]);
+
+        for (int i = 0; i < _dynamicTraps.Count; ++i)
         {
-            var elem = _trapElements[i];
-            var elemPos = _trapProperties[i].Location;
-            var elemColor = _trapProperties[i].Color;
-            var elemThickness = _trapProperties[i].Thickness;
-            var dist = float.Abs(Vector3.Distance(elemPos, playerPos));
-
-            uint newColor = 0x000000FF;
-            float newThickness = 1f;
-
-            if (dist <= 60f)
-            {
-                uint alpha = 0x9F;
-                alpha = ((uint)(alpha * float.Sqrt(1.0f - dist / 40f))) << 24;
-                newColor = (elemColor & 0x00FFFFFF) | alpha;
-                newThickness = float.Max(1.0f, (1.0f - dist / 60f) * 2.5f);
-            }
-
-            if (elemColor != newColor)
-                elem.color = _trapProperties[i].Color = newColor;
-
-            if (elemThickness != newThickness)
-                elem.thicc = _trapProperties[i].Thickness = newThickness;
+            var trap = _dynamicTraps[i];
+            _dynamicTraps[i] = trap with { Props = UpdateSingleLocation(playerPos, trap.Props, trap.Elem) };
         }
+    }
+
+    private static TrapElement UpdateSingleLocation(Vector3 playerPos, TrapElement props, Element elem)
+    {
+        var elemPos = props.Location;
+        var elemColor = props.Color;
+        var elemThickness = props.Thickness;
+        var dist = float.Abs(Vector3.Distance(elemPos, playerPos));
+
+        uint newColor = 0x000000FF;
+        float newThickness = 1f;
+
+        if (dist <= 60f)
+        {
+            uint alpha = 0x9F;
+            alpha = ((uint)(alpha * float.Sqrt(1.0f - dist / 40f))) << 24;
+            newColor = (elemColor & 0x00FFFFFF) | alpha;
+            newThickness = float.Max(1.0f, (1.0f - dist / 60f) * 2.5f);
+        }
+
+        if (elemColor != newColor)
+            elem.color = props.Color = newColor;
+
+        if (elemThickness != newThickness)
+            elem.thicc = props.Thickness = newThickness;
+
+        return props;
     }
 
     public void ClearLocations()
@@ -141,9 +162,8 @@ public class CircleRenderer : IDisposable
         if (_activeLabels.Contains(objectId)) return;
 
         if (!_elements.ContainsKey("ChestLabel"))
-            _elements.Add("ChestLabel", new());
+            _elements.Add("ChestLabel", new(16));
 
-        DalamudService.Log.Debug("adding element");
         var elem = CreateChestLabelElement(objectId, labelText);
         _elements["ChestLabel"].Add(elem);
         Splatoon.AddDynamicElement("PalaceBuddy.ChestLabel", elem, -2);
@@ -166,6 +186,14 @@ public class CircleRenderer : IDisposable
 
         _elements.Clear();
         _activeLabels.Clear();
+
+        RemoveTemporaryTraps();
+    }
+
+    public void RemoveTemporaryTraps()
+    {
+        Splatoon.RemoveDynamicElements($"PalaceBuddy.DynamicTraps");
+        _dynamicTraps.Clear();
     }
 
     private void RemoveAllElements()
