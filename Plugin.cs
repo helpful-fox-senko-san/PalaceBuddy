@@ -3,6 +3,7 @@ using Dalamud.Plugin;
 using Dalamud.Interface.Windowing;
 using PalaceBuddy.Ui;
 using ECommons;
+using System;
 
 namespace PalaceBuddy;
 
@@ -18,22 +19,30 @@ public sealed class Plugin : IDalamudPlugin
     public static CircleRenderer CircleRenderer { get; private set; } = null!;
     public static GameScanner GameScanner { get; private set; } = null!;
 
-    public static DebugWindow DebugWindow { get; private set; } = null!;
+    public static ConfigWindow ConfigWindow { get; private set; } = null!;
 
     public Plugin(IDalamudPluginInterface pluginInterface)
     {
         DalamudService.Initialize(pluginInterface);
         ECommonsMain.Init(pluginInterface, this, Module.SplatoonAPI);
 
-        Configuration = DalamudService.PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        try
+        {
+            Configuration = DalamudService.PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        }
+        catch (Exception ex)
+        {
+            DalamudService.Log.Error(ex, "Loading configuration failed, resetting");
+            Configuration = new Configuration();
+        }
 
         Buddy = new Buddy();
         LocationLoader = new LocationLoader();
         CircleRenderer = new CircleRenderer();
         GameScanner = new GameScanner();
 
-        DebugWindow = new DebugWindow();
-        WindowSystem.AddWindow(DebugWindow);
+        ConfigWindow = new ConfigWindow();
+        WindowSystem.AddWindow(ConfigWindow);
 
         DalamudService.CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
@@ -44,18 +53,19 @@ public sealed class Plugin : IDalamudPlugin
         DalamudService.PluginInterface.UiBuilder.OpenMainUi += OpenMainUi;
 
         if (DalamudService.PluginInterface.Reason == PluginLoadReason.Reload)
-            DebugWindow.IsOpen = true;
+            ConfigWindow.OpenTab(ConfigWindow.Tabs.Debug);
 
-        DalamudService.Framework.RunOnFrameworkThread(() => {
+        DalamudService.Framework.RunOnFrameworkThread(() =>
+        {
             Buddy.Initialize();
         });
-    }
+        }
 
     public void Dispose()
     {
         WindowSystem.RemoveAllWindows();
 
-        DebugWindow.Dispose();
+        ConfigWindow.Dispose();
 
         CircleRenderer.Dispose();
         Buddy.Dispose();
@@ -71,11 +81,11 @@ public sealed class Plugin : IDalamudPlugin
 
     public static void OpenMainUi()
     {
-        DebugWindow.IsOpen = true;
+        ConfigWindow.IsOpen = true;
     }
 
     private void OnCommand(string command, string args)
     {
-        DebugWindow.Toggle();
+        ConfigWindow.Toggle();
     }
 }

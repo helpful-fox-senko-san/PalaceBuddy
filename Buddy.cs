@@ -15,12 +15,14 @@ namespace PalaceBuddy;
 // Every function in this class, except the constructor and Dispose, is expected to be run on the Framework thread
 public class Buddy : IDisposable
 {
-    private class BuddyFloorState
+    internal class BuddyFloorState
     {
         public bool PassageActive;
         public bool TransferActive;
+        public bool SightActive;
         public bool SafetyActive;
         public int FloorNumber = -1;
+        public bool BossFloor;
         public bool Solo = DalamudService.PartyList.Length < 2;
 
         public ulong LastSilverCofferTargetId = 0;
@@ -29,17 +31,24 @@ public class Buddy : IDisposable
     }
 
     private bool _disposed = false;
-    private BuddyFloorState? FloorState = null;
+    internal BuddyFloorState? FloorState = null;
     private List<Vector3>? CachedLocationList = null;
 
     public bool Enabled => FloorState != null;
     public bool PassageActive => FloorState?.PassageActive ?? false;
     public bool TransferActive => FloorState?.TransferActive ?? false;
+    public bool SightActive => FloorState?.SightActive ?? false;
     public bool SafetyActive => FloorState?.SafetyActive ?? false;
     public int FloorNumber => FloorState?.FloorNumber ?? -1;
     public Vector3 PlayerPosition => _playerPosition;
     public uint LastSilverCofferTargetId => (uint)(FloorState?.LastSilverCofferTargetId ?? 0);
     public uint LastGoldCofferTargetId => (uint)(FloorState?.LastGoldCofferTargetId ?? 0);
+
+    public bool ShouldDisplayTrapLocations =>
+        Plugin.Configuration.ShowTrapLocations && FloorState != null && !FloorState.BossFloor && !FloorState.SightActive && !FloorState.SafetyActive;
+
+    public bool ShouldDisplaySightedTraps =>
+        Plugin.Configuration.ShowSightedTraps && FloorState != null && !FloorState.BossFloor && !FloorState.SafetyActive;
 
     private readonly Regex _passageRegex;
     private readonly Regex _floorRegex;
@@ -56,6 +65,8 @@ public class Buddy : IDisposable
     private readonly string _mazerootSingular;
 
     private Vector3 _playerPosition;
+    private bool _forceUpdate;
+    private bool _trapLocationsEnabled;
 
     private const ushort DeepDungeonChatTypeId = 2105; // XivChatType
 
@@ -268,16 +279,9 @@ public class Buddy : IDisposable
         DalamudService.ChatGui.ChatMessage += OnChatMessage;
         DalamudService.Framework.Update += OnFrameworkUpdate;
         FloorState = new();
-        Plugin.CircleRenderer.EnableRender();
 
-        // Load the trap list and hand it off to the circle renderer
-        var territoryType = DalamudService.ClientState.TerritoryType;
-        Plugin.LocationLoader.GetLocationsForTerritory(territoryType).ContinueWith(task => {
-            CachedLocationList = task.Result;
-            DalamudService.Log.Debug($"Loaded {CachedLocationList.Count} locations");
-            if (FloorState == null) return;
-            Plugin.CircleRenderer.SetLocations(CachedLocationList, _playerPosition);
-        });
+        if (ShouldDisplayTrapLocations)
+            EnableTrapLocations();
 
         // XXX: After checking the map floor, it may result in Disable() being called immediately
         CheckMapFloorNow();
@@ -286,12 +290,57 @@ public class Buddy : IDisposable
     public void Disable()
     {
         if (FloorState == null) return;
+        DisableTrapLocations();
+        Plugin.CircleRenderer.RemoveTemporaryElements();
         DalamudService.Log.Debug("Buddy.Disable");
         DalamudService.ChatGui.ChatMessage -= OnChatMessage;
         DalamudService.Framework.Update -= OnFrameworkUpdate;
         FloorState = null;
         CachedLocationList = null;
-        Plugin.CircleRenderer.DisableRender();
+    }
+
+    // Load the trap list and hand it off to the circle renderer
+    public void EnableTrapLocations()
+    {
+        if (_trapLocationsEnabled)
+            return;
+        DalamudService.Log.Debug("Buddy.EnableTrapLocations");
+        _trapLocationsEnabled = true;
+        var territoryType = DalamudService.ClientState.TerritoryType;
+
+        void ShowCachedLocations()
+        {
+            if (FloorState == null) return;
+            if (!ShouldDisplayTrapLocations) return;
+            Plugin.CircleRenderer.SetLocations(CachedLocationList, _playerPosition);
+        }
+
+        if (CachedLocationList != null)
+            ShowCachedLocations();
+
+        Plugin.LocationLoader.GetLocationsForTerritory(territoryType).ContinueWith(task => {
+            CachedLocationList = task.Result;
+            DalamudService.Log.Debug($"Loaded {CachedLocationList.Count} locations");
+            ShowCachedLocations();
+        });
+    }
+
+    public void DisableTrapLocations()
+    {
+        if (!_trapLocationsEnabled)
+            return;
+        DalamudService.Log.Debug("Buddy.DisableTrapLocations");
+        Plugin.CircleRenderer.ClearLocations();
+        _trapLocationsEnabled = false;
+    }
+
+    // Force elements to update after changing settings
+    public void ForceUpdate()
+    {
+        if (DalamudService.ClientState.LocalPlayer == null) return;
+        if (FloorState == null) return;
+
+        _forceUpdate = true;
     }
 
     public void Dispose()
@@ -352,6 +401,24 @@ public class Buddy : IDisposable
         if (DalamudService.ClientState.LocalPlayer == null) return;
         if (FloorState == null) return;
 
+        // Handle toggling options on/off
+        if (_forceUpdate)
+        {
+            if (ShouldDisplayTrapLocations)
+                EnableTrapLocations();
+            else if (!ShouldDisplayTrapLocations)
+                DisableTrapLocations();
+
+            if (!ShouldDisplaySightedTraps)
+            {
+                Plugin.CircleRenderer.RemoveTemporaryTraps();
+                Plugin.GameScanner.ClearSeenTraps();
+            }
+
+            if (!Plugin.Configuration.MarkChestContents)
+                Plugin.CircleRenderer.RemoveTemporaryElements("ChestLabel");
+        }
+
         var localPlayer = DalamudService.ClientState.LocalPlayer!;
 
         var targetId = localPlayer.TargetObjectId;
@@ -367,28 +434,33 @@ public class Buddy : IDisposable
         }
 
         var playerPos = localPlayer.Position;
-        if (playerPos != _playerPosition)
+        if (playerPos != _playerPosition || _forceUpdate)
         {
             _playerPosition = playerPos;
             Plugin.CircleRenderer.UpdateLocations(_playerPosition);
         }
 
-        foreach (var trap in Plugin.GameScanner.FindNewTraps(DalamudService.Framework, TrapDataIds))
+        if (ShouldDisplaySightedTraps)
         {
-            if (CachedLocationList != null && !CachedLocationList.Contains(trap.Position))
+            foreach (var trap in Plugin.GameScanner.FindNewTraps(DalamudService.Framework, TrapDataIds))
             {
-                var tt = DalamudService.ClientState.TerritoryType;
-                var x = trap.Position.X;
-                var y = trap.Position.Y;
-                var z = trap.Position.Z;
+                if (CachedLocationList != null && !CachedLocationList.Contains(trap.Position))
+                {
+                    var tt = DalamudService.ClientState.TerritoryType;
+                    var x = trap.Position.X;
+                    var y = trap.Position.Y;
+                    var z = trap.Position.Z;
 #if DEBUG
-                DalamudService.ToastGui.ShowQuest("New trap location");
-                DalamudService.ChatGui.Print($"Location: {tt}, {x}, {y}, {z}");
+                    DalamudService.ToastGui.ShowQuest("New trap location");
+                    DalamudService.ChatGui.Print($"Location: {tt}, {x}, {y}, {z}");
 #endif
-                DalamudService.Log.Information("New trap location: {tt}, {x}, {y}, {z}", tt, x, y, z);
+                    DalamudService.Log.Information("New trap location: {tt}, {x}, {y}, {z}", tt, x, y, z);
+                }
+                Plugin.CircleRenderer.AddLocation(trap.Position, playerPos);
             }
-            Plugin.CircleRenderer.AddLocation(trap.Position, playerPos);
         }
+
+        _forceUpdate = false;
     }
 
     // Transference initiated!
@@ -411,51 +483,53 @@ public class Buddy : IDisposable
     }
 
     // All the traps on this floor have disappeared!
-    private void OnSafetyMessage()
+    internal void OnSafetyMessage()
     {
         if (FloorState == null) return;
         DalamudService.Log.Debug("Buddy.OnSafetyMessage");
         // Safety should hide all trap markers
+        FloorState.SightActive = true;
         FloorState.SafetyActive = true;
         Plugin.CircleRenderer.ClearLocations();
         Plugin.CircleRenderer.RemoveTemporaryTraps();
     }
 
     // The map for this floor has been revealed!
-    private void OnSightMessage()
+    internal void OnSightMessage()
     {
         if (FloorState == null) return;
         DalamudService.Log.Debug("Buddy.OnSightMessage");
         // Sight should hide all (guessed) trap markers
-        FloorState.SafetyActive = true;
+        FloorState.SightActive = true;
         Plugin.CircleRenderer.ClearLocations();
     }
 
     // Floor ##
-    private void OnFloorChangeMessage(int floor)
+    internal void OnFloorChangeMessage(int floor)
     {
         if (FloorState == null) return;
         DalamudService.Log.Debug($"Buddy.OnFloorChangeMessage({floor})");
         if (floor == FloorNumber) return;
-        bool wasSafety = FloorState.SafetyActive;
+        bool wasDisplaying = ShouldDisplayTrapLocations;
         FloorState = new() { FloorNumber = floor };
         Plugin.CircleRenderer.RemoveTemporaryElements();
+        Plugin.CircleRenderer.RemoveTemporaryTraps();
+        Plugin.GameScanner.ClearSeenTraps();
 
         // No traps on boss floors
         bool isBossFloor = (floor % 10 == 0)
             || (DalamudService.ClientState.TerritoryType == (ushort)ETerritoryType.EurekaOrthos_91_100 && floor == 99)
             || (DalamudService.ClientState.TerritoryType == (ushort)ETerritoryType.PilgrimsTraverse_91_100 && floor == 99);
-        if (isBossFloor)
-        {
-            Disable();
-            return;
-        }
+
+        FloorState.BossFloor = isBossFloor;
 
         // Restore hidden trap elements after entering a new floor
-        if (CachedLocationList != null && wasSafety)
-            Plugin.CircleRenderer.SetLocations(CachedLocationList, _playerPosition);
+        if (!wasDisplaying && ShouldDisplayTrapLocations)
+            EnableTrapLocations();
 
-        Plugin.GameScanner.ClearSeenTraps();
+        // Or hide them after entering a boss floor
+        if (wasDisplaying && !ShouldDisplayTrapLocations)
+            DisableTrapLocations();
     }
 
     // The ## of Passage is activated!
@@ -507,16 +581,19 @@ public class Buddy : IDisposable
         {
             Plugin.CircleRenderer.RemoveTemporaryTraps();
             Plugin.GameScanner.ClearSeenTraps();
-        }, TimeSpan.FromSeconds(5));
+        }, TimeSpan.FromMilliseconds(4500));
     }
 
     // You return the pomander of ## to the coffer.
-    private void OnFullMessage(string itemName)
+    internal void OnFullMessage(string itemName)
     {
         if (FloorState == null) return;
         // Can't reliably correlate chat messages to chests in parties
         if (!FloorState.Solo) return;
         DalamudService.Log.Debug("Buddy.OnFullMessage");
+
+        if (!Plugin.Configuration.MarkChestContents)
+            return;
 
         uint chestToMark = 0;
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using ECommons;
 using ECommons.SplatoonAPI;
 
 namespace PalaceBuddy;
@@ -30,7 +31,7 @@ public class CircleRenderer : IDisposable
         var trapElement = new TrapElement()
         {
             Location = location,
-            Color = 0x9F0000FF,
+            Color = Plugin.Configuration.TrapColor.ToUint(),
             Thickness = 2f
         };
 
@@ -71,21 +72,13 @@ public class CircleRenderer : IDisposable
     }
 #endregion
 
-    public void EnableRender()
-    {
-    }
-
-    // Clean up and remove all elements
-    public void DisableRender()
-    {
-        RemoveAllElements();
-    }
-
     // Create the trap elements after loading locations from the database
     public void SetLocations(List<Vector3> locationList, Vector3 playerPos)
     {
         if (_trapElements.Length > 0)
             Splatoon.RemoveDynamicElements("PalaceBuddy.Traps");
+
+        DalamudService.Log.Verbose("CircleRenderer.SetLocations");
 
         _trapProperties = new TrapElement[locationList.Count];
         _trapElements = new Element[locationList.Count];
@@ -129,15 +122,21 @@ public class CircleRenderer : IDisposable
         var elemThickness = props.Thickness;
         var dist = float.Abs(Vector3.Distance(elemPos, playerPos));
 
+        var trapColor = Plugin.Configuration.TrapColor.ToUint();
+        var trapThickness = Plugin.Configuration.TrapThickness;
+
         uint newColor = 0x000000FF;
         float newThickness = 1f;
 
-        if (dist <= 60f)
+        float drawDist = float.Max(Plugin.Configuration.TrapDrawDistance, 30.0f);
+        float drawDistPlus = drawDist * 1.5f;
+
+        if (dist <= drawDistPlus)
         {
-            uint alpha = 0x9F;
-            alpha = ((uint)(alpha * float.Sqrt(1.0f - dist / 40f))) << 24;
-            newColor = (elemColor & 0x00FFFFFF) | alpha;
-            newThickness = float.Max(1.0f, (1.0f - dist / 60f) * 2.5f);
+            uint alpha = (trapColor & 0xFF000000U) >> 24;
+            alpha = ((uint)(alpha * float.Sqrt(1.0f - dist / drawDist))) << 24;
+            newColor = (trapColor & 0x00FFFFFF) | alpha;
+            newThickness = float.Max(1.0f, (1.0f - dist / drawDistPlus) * trapThickness);
         }
 
         if (elemColor != newColor)
@@ -170,24 +169,28 @@ public class CircleRenderer : IDisposable
         _activeLabels.Add(objectId);
     }
 
-    public void Redraw()
-    {
-    }
-
     public void Dispose()
     {
         RemoveAllElements();
     }
 
-    public void RemoveTemporaryElements()
+    public void RemoveTemporaryElements(string? key = null)
     {
-        foreach (var elem in _elements)
-            Splatoon.RemoveDynamicElements($"PalaceBuddy.{elem.Key}");
+        if (key == null)
+        {
+            foreach (var elem in _elements)
+                Splatoon.RemoveDynamicElements($"PalaceBuddy.{elem.Key}");
+            _elements.Clear();
+        }
+        else
+        {
+            Splatoon.RemoveDynamicElements($"PalaceBuddy.{key}");
+            if (_elements.ContainsKey(key))
+                _elements[key].Clear();
+        }
 
-        _elements.Clear();
-        _activeLabels.Clear();
-
-        RemoveTemporaryTraps();
+        if (key == null || key == "ChestLabel")
+            _activeLabels.Clear();
     }
 
     public void RemoveTemporaryTraps()
@@ -196,11 +199,10 @@ public class CircleRenderer : IDisposable
         _dynamicTraps.Clear();
     }
 
-    private void RemoveAllElements()
+    public void RemoveAllElements()
     {
-        if (_trapElements.Length > 0)
-            Splatoon.RemoveDynamicElements("PalaceBuddy.Traps");
-
+        ClearLocations();
+        RemoveTemporaryTraps();
         RemoveTemporaryElements();
     }
 }

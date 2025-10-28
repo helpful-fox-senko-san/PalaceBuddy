@@ -40,7 +40,6 @@ public class GameScanner
             if (!trapIds.Contains(dataId))
                 continue;
 
-            var pos = eobj.Position;
             var trap = new GameTrap()
             {
                 DataId = eobj.BaseId,
