@@ -290,9 +290,9 @@ public class Buddy : IDisposable
     public void Disable()
     {
         if (FloorState == null) return;
+        DalamudService.Log.Debug("Buddy.Disable");
         DisableTrapLocations();
         Plugin.CircleRenderer.RemoveTemporaryElements();
-        DalamudService.Log.Debug("Buddy.Disable");
         DalamudService.ChatGui.ChatMessage -= OnChatMessage;
         DalamudService.Framework.Update -= OnFrameworkUpdate;
         FloorState = null;
@@ -316,7 +316,10 @@ public class Buddy : IDisposable
         }
 
         if (CachedLocationList != null)
+        {
             ShowCachedLocations();
+            return;
+        }
 
         Plugin.LocationLoader.GetLocationsForTerritory(territoryType).ContinueWith(task => {
             CachedLocationList = task.Result;
@@ -490,7 +493,7 @@ public class Buddy : IDisposable
         // Safety should hide all trap markers
         FloorState.SightActive = true;
         FloorState.SafetyActive = true;
-        Plugin.CircleRenderer.ClearLocations();
+        DisableTrapLocations();
         Plugin.CircleRenderer.RemoveTemporaryTraps();
     }
 
@@ -501,7 +504,7 @@ public class Buddy : IDisposable
         DalamudService.Log.Debug("Buddy.OnSightMessage");
         // Sight should hide all (guessed) trap markers
         FloorState.SightActive = true;
-        Plugin.CircleRenderer.ClearLocations();
+        DisableTrapLocations();
     }
 
     // Floor ##
@@ -510,7 +513,6 @@ public class Buddy : IDisposable
         if (FloorState == null) return;
         DalamudService.Log.Debug($"Buddy.OnFloorChangeMessage({floor})");
         if (floor == FloorNumber) return;
-        bool wasDisplaying = ShouldDisplayTrapLocations;
         FloorState = new() { FloorNumber = floor };
         Plugin.CircleRenderer.RemoveTemporaryElements();
         Plugin.CircleRenderer.RemoveTemporaryTraps();
@@ -524,11 +526,10 @@ public class Buddy : IDisposable
         FloorState.BossFloor = isBossFloor;
 
         // Restore hidden trap elements after entering a new floor
-        if (!wasDisplaying && ShouldDisplayTrapLocations)
-            EnableTrapLocations();
-
         // Or hide them after entering a boss floor
-        if (wasDisplaying && !ShouldDisplayTrapLocations)
+        if (ShouldDisplayTrapLocations)
+            EnableTrapLocations();
+        else
             DisableTrapLocations();
     }
 
