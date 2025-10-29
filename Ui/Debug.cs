@@ -3,6 +3,7 @@ using Dalamud.Interface.Utility.Raii;
 using Dalamud.Bindings.ImGui;
 using System;
 using System.Threading.Tasks;
+using System.Numerics;
 
 namespace PalaceBuddy.Ui;
 
@@ -15,14 +16,59 @@ public partial class ConfigWindow : Window, IDisposable
     {
         using var tabId = ImRaii.PushId("Debug");
 
+        string realTerritoryString = $"#{DalamudService.ClientState.TerritoryType}";
+        string overrideZonePreview = realTerritoryString;
+
+        if (Plugin.IsOverrideTerritory)
+            overrideZonePreview = $"#{Plugin.OverrideTerritory} {(ETerritoryType)Plugin.OverrideTerritory}";
+
+        var enumType = typeof(ETerritoryType);
+
+        using (var zoneCombo = ImRaii.Combo("Override Zone", overrideZonePreview))
+        {
+            if (zoneCombo)
+            {
+                if (ImGui.Selectable(realTerritoryString, Plugin.OverrideTerritory == 0))
+                {
+                    Plugin.OverrideTerritory = 0;
+                    Plugin.Buddy.OnTerritoryChanged(Plugin.TerritoryType);
+                }
+
+                foreach (ETerritoryType zone in Enum.GetValues<ETerritoryType>())
+                {
+                    if (ImGui.Selectable($"#{(ushort)zone} {zone}", Plugin.OverrideTerritory == (ushort)zone))
+                    {
+                        Plugin.OverrideTerritory = (ushort)zone;
+                        Plugin.Buddy.OnTerritoryChanged(Plugin.TerritoryType);
+                    }
+                }
+            }
+        }
+
         ImGui.TextUnformatted($"Buddy.Enabled: {Plugin.Buddy.Enabled}");
         if (Plugin.Buddy.Enabled)
         {
             ImGui.SameLine();
             if (ImGui.SmallButton("Test Disable"))
                 Plugin.Buddy.Disable();
+            ImGui.TextUnformatted($"Override: {Plugin.IsOverrideTerritory}");
             var pos = Plugin.Buddy.PlayerPosition;
-            ImGui.TextUnformatted($"PlayerPosition {pos.X:0.0000},{pos.Y:0.0000},{pos.Z:0.0000}");
+            ImGui.TextUnformatted($"PlayerPosition {pos.X:0.00},{pos.Y:0.00},{pos.Z:0.00}");
+            if (Plugin.Buddy.CachedLocationList != null && Plugin.Buddy.CachedLocationList.Count > 0)
+            {
+                Vector3 closest = Plugin.Buddy.CachedLocationList[0];
+                float closestDist = Vector3.Distance(pos, closest);
+                foreach (var trapPos in Plugin.Buddy.CachedLocationList)
+                {
+                    float dist = Vector3.Distance(pos, trapPos);
+                    if (dist < closestDist)
+                    {
+                        closest = trapPos;
+                        closestDist = dist;
+                    }
+                }
+                ImGui.TextUnformatted($"Nearest {closest.X:0.00},{closest.Y:0.00},{closest.Z:0.00}");
+            }
             ImGui.TextUnformatted($"FloorNumber: {Plugin.Buddy.FloorNumber}");
 
             ImGui.Text("  Test");

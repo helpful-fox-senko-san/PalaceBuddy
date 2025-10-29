@@ -32,7 +32,7 @@ public class Buddy : IDisposable
 
     private bool _disposed = false;
     internal BuddyFloorState? FloorState = null;
-    private List<Vector3>? CachedLocationList = null;
+    internal List<Vector3>? CachedLocationList = null;
 
     public bool Enabled => FloorState != null;
     public bool PassageActive => FloorState?.PassageActive ?? false;
@@ -266,7 +266,7 @@ public class Buddy : IDisposable
     public void Initialize()
     {
         // Check initial state
-        OnTerritoryChanged(DalamudService.ClientState.TerritoryType);
+        OnTerritoryChanged(Plugin.TerritoryType);
     }
 
     public void Enable()
@@ -275,7 +275,7 @@ public class Buddy : IDisposable
         DalamudService.Log.Debug("Buddy.Enable");
         var playerPos = DalamudService.ClientState.LocalPlayer?.Position;
         if (playerPos.HasValue)
-            _playerPosition = playerPos.Value;
+            _playerPosition = Plugin.RoundPos(playerPos.Value);
         DalamudService.ChatGui.ChatMessage += OnChatMessage;
         DalamudService.Framework.Update += OnFrameworkUpdate;
         FloorState = new();
@@ -306,7 +306,7 @@ public class Buddy : IDisposable
             return;
         DalamudService.Log.Debug("Buddy.EnableTrapLocations");
         _trapLocationsEnabled = true;
-        var territoryType = DalamudService.ClientState.TerritoryType;
+        var territoryType = Plugin.TerritoryType;
 
         void ShowCachedLocations()
         {
@@ -321,6 +321,7 @@ public class Buddy : IDisposable
             return;
         }
 
+        DalamudService.Log.Debug($"Loading traps for territory {territoryType}");
         Plugin.LocationLoader.GetLocationsForTerritory(territoryType).ContinueWith(task => {
             CachedLocationList = task.Result;
             DalamudService.Log.Debug($"Loaded {CachedLocationList.Count} locations");
@@ -436,7 +437,7 @@ public class Buddy : IDisposable
                 FloorState.LastSilverCofferTargetId = targetId;
         }
 
-        var playerPos = localPlayer.Position;
+        var playerPos = Plugin.RoundPos(localPlayer.Position);
         if (playerPos != _playerPosition || _forceUpdate)
         {
             _playerPosition = playerPos;
@@ -447,9 +448,9 @@ public class Buddy : IDisposable
         {
             foreach (var trap in Plugin.GameScanner.FindNewTraps(DalamudService.Framework, TrapDataIds))
             {
-                if (CachedLocationList != null && !CachedLocationList.Contains(trap.Position))
+                if (Plugin.IsOverrideTerritory && CachedLocationList != null && !CachedLocationList.Contains(trap.Position))
                 {
-                    var tt = DalamudService.ClientState.TerritoryType;
+                    var tt = Plugin.TerritoryType;
                     var x = trap.Position.X;
                     var y = trap.Position.Y;
                     var z = trap.Position.Z;
@@ -520,8 +521,8 @@ public class Buddy : IDisposable
 
         // No traps on boss floors
         bool isBossFloor = (floor % 10 == 0)
-            || (DalamudService.ClientState.TerritoryType == (ushort)ETerritoryType.EurekaOrthos_91_100 && floor == 99)
-            || (DalamudService.ClientState.TerritoryType == (ushort)ETerritoryType.PilgrimsTraverse_91_100 && floor == 99);
+            || (Plugin.TerritoryType == (ushort)ETerritoryType.EurekaOrthos_91_100 && floor == 99)
+            || (Plugin.TerritoryType == (ushort)ETerritoryType.PilgrimsTraverse_91_100 && floor == 99);
 
         FloorState.BossFloor = isBossFloor;
 
@@ -615,7 +616,7 @@ public class Buddy : IDisposable
     }
 
     // TerritoryKind=31 for deep dungeon
-    private void OnTerritoryChanged(ushort territoryType)
+    internal void OnTerritoryChanged(ushort territoryType)
     {
         DalamudService.Log.Debug("Buddy.OnTerritoryChanged");
         if (DDTerritoryTypes.Contains((ETerritoryType)territoryType))

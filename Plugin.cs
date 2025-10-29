@@ -4,6 +4,7 @@ using Dalamud.Interface.Windowing;
 using PalaceBuddy.Ui;
 using ECommons;
 using System;
+using System.Numerics;
 
 namespace PalaceBuddy;
 
@@ -20,6 +21,20 @@ public sealed class Plugin : IDalamudPlugin
     public static GameScanner GameScanner { get; private set; } = null!;
 
     public static ConfigWindow ConfigWindow { get; private set; } = null!;
+
+    public static ushort OverrideTerritory { get; set; }
+    public static bool IsOverrideTerritory => OverrideTerritory != 0;
+    public static ushort TerritoryType =>
+        IsOverrideTerritory ? OverrideTerritory : DalamudService.ClientState.TerritoryType;
+
+    public static Vector3 RoundPos(Vector3 pos)
+    {
+        return new Vector3(
+            float.Round(pos.X * 100.0f, MidpointRounding.AwayFromZero) / 100.0f,
+            float.Round(pos.Y * 100.0f, MidpointRounding.AwayFromZero) / 100.0f,
+            float.Round(pos.Z * 100.0f, MidpointRounding.AwayFromZero) / 100.0f
+        );
+    }
 
     public Plugin(IDalamudPluginInterface pluginInterface)
     {
@@ -59,7 +74,7 @@ public sealed class Plugin : IDalamudPlugin
         {
             Buddy.Initialize();
         });
-        }
+    }
 
     public void Dispose()
     {

@@ -44,7 +44,7 @@ public class GameScanner
             {
                 DataId = eobj.BaseId,
                 ObjectId = id,
-                Position = eobj.Position
+                Position = Plugin.RoundPos(eobj.Position)
             };
 
             yield return trap;

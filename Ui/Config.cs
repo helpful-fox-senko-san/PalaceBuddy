@@ -35,7 +35,7 @@ public partial class ConfigWindow : Window, IDisposable
             Plugin.Configuration.Save();
             Plugin.Buddy.ForceUpdate();
         }
-        DrawHelpText("Continue to indicate traps identified by a pomander of sight.");
+        DrawHelpText("Continue to indicate traps revealed by a pomander of sight.");
 
         b = Plugin.Configuration.MarkChestContents;
         if (ImGui.Checkbox("Mark Chest Contents", ref b))
