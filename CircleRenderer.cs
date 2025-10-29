@@ -15,18 +15,18 @@ public class CircleRenderer : IDisposable
         public float Thickness;
     }
 
-    private readonly Dictionary<string, List<Element>> _elements = new(4);
-    private readonly List<(TrapElement Props, Element Elem)> _dynamicTraps = new(4);
+    private readonly Dictionary<string, List<Element?>> _elements = new(4);
+    private readonly List<(TrapElement Props, Element? Elem)> _dynamicTraps = new(4);
 
     private TrapElement[] _trapProperties = [];
-    private Element[] _trapElements = [];
+    private Element?[] _trapElements = [];
     private readonly List<uint> _activeLabels = new();
 
     public int NumTrapElements => _trapElements.Length;
     public int NumActiveLabels => _activeLabels.Count;
 
-#region Element Styling
-    private (TrapElement, Element) CreateTrapElement(Vector3 location)
+    #region Element Styling
+    private (TrapElement, Element?) CreateTrapElement(Vector3 location)
     {
         var trapElement = new TrapElement()
         {
@@ -35,17 +35,23 @@ public class CircleRenderer : IDisposable
             Thickness = 2f
         };
 
-        var splatoonElement = new Element(ElementType.CircleAtFixedCoordinates)
-        {
-            refX = location.X,
-            refY = location.Z,
-            refZ = location.Y,
+        Element? splatoonElement = null;
 
-            Filled = false,
-            radius = 1.7f,
-            color = trapElement.Color,
-            thicc = trapElement.Thickness
-        };
+        try
+        {
+            splatoonElement = new Element(ElementType.CircleAtFixedCoordinates)
+            {
+                refX = location.X,
+                refY = location.Z,
+                refZ = location.Y,
+
+                Filled = false,
+                radius = 1.7f,
+                color = trapElement.Color,
+                thicc = trapElement.Thickness
+            };
+        }
+        catch { }
 
         return (trapElement, splatoonElement);
     }
@@ -70,11 +76,36 @@ public class CircleRenderer : IDisposable
             thicc = 0
         };
     }
-#endregion
+    #endregion
+
+    public bool IsConnected => Splatoon.IsConnected();
+
+    public CircleRenderer()
+    {
+        Splatoon.SetOnConnect(OnConnect);
+    }
+
+    private void OnConnect()
+    {
+        DalamudService.Framework.RunOnTick(() =>
+        {
+            DalamudService.Log.Information("Re-building Splatoon elements");
+            _elements.Clear();
+            _dynamicTraps.Clear();
+
+            for (int i = 0; i < _trapElements.Length; ++i)
+                (_trapProperties[i], _trapElements[i]) = CreateTrapElement(_trapProperties[i].Location);
+
+            Splatoon.AddDynamicElements("PalaceBuddy.Traps", _trapElements, -2);
+        }, TimeSpan.FromSeconds(1));
+    }
 
     // Create the trap elements after loading locations from the database
     public void SetLocations(List<Vector3> locationList, Vector3 playerPos)
     {
+        if (!Splatoon.IsConnected())
+            DalamudService.ChatGui.PrintError("[PalaceBuddy] Warning: Splatoon is not loaded!");
+
         if (_trapElements.Length > 0)
             Splatoon.RemoveDynamicElements("PalaceBuddy.Traps");
 
@@ -83,9 +114,7 @@ public class CircleRenderer : IDisposable
         _trapProperties = new TrapElement[locationList.Count];
         _trapElements = new Element[locationList.Count];
         for (int i = 0; i < locationList.Count; ++i)
-        {
             (_trapProperties[i], _trapElements[i]) = CreateTrapElement(locationList[i]);
-        }
 
         if (_trapElements.Length > 0)
             Splatoon.AddDynamicElements("PalaceBuddy.Traps", _trapElements, -2);
@@ -105,6 +134,9 @@ public class CircleRenderer : IDisposable
     // Update the appearance of trap indicators based on the player position
     public void UpdateLocations(Vector3 playerPos)
     {
+        if (!Splatoon.IsConnected())
+            return;
+
         for (int i = 0; i < _trapElements.Length; ++i)
             _trapProperties[i] = UpdateSingleLocation(playerPos, _trapProperties[i], _trapElements[i]);
 
@@ -115,8 +147,10 @@ public class CircleRenderer : IDisposable
         }
     }
 
-    private static TrapElement UpdateSingleLocation(Vector3 playerPos, TrapElement props, Element elem)
+    private static TrapElement UpdateSingleLocation(Vector3 playerPos, TrapElement props, Element? elem)
     {
+        if (elem == null) return props;
+
         var elemPos = props.Location;
         var elemColor = props.Color;
         var elemThickness = props.Thickness;

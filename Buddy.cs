@@ -456,7 +456,7 @@ public class Buddy : IDisposable
                     var z = trap.Position.Z;
 #if DEBUG
                     DalamudService.ToastGui.ShowQuest("New trap location");
-                    DalamudService.ChatGui.Print($"Location: {tt}, {x}, {y}, {z}");
+                    DalamudService.ChatGui.Print($"[PalaceBuddy] Location: {tt}, {x}, {y}, {z}");
 #endif
                     DalamudService.Log.Information("New trap location: {tt}, {x}, {y}, {z}", tt, x, y, z);
                 }

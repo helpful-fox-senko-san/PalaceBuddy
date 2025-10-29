@@ -4,6 +4,7 @@ using Dalamud.Interface.Utility.Raii;
 using Dalamud.Bindings.ImGui;
 using System;
 using System.Numerics;
+using Dalamud.Interface.Colors;
 
 namespace PalaceBuddy.Ui;
 
@@ -18,6 +19,12 @@ public partial class ConfigWindow : Window, IDisposable
         bool b;
         float f;
         Vector4 vec4;
+
+        if (!Plugin.CircleRenderer.IsConnected)
+        {
+            ImGui.TextColoredWrapped(ImGuiColors.DalamudYellow, "Warning: Splatoon must be installed and enabled for the plugin to function!");
+            ImGui.Separator();
+        }
 
         b = Plugin.Configuration.ShowTrapLocations;
         if (ImGui.Checkbox("Show Possible Trap Locations", ref b))
