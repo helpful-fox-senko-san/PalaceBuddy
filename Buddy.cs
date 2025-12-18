@@ -273,7 +273,7 @@ public class Buddy : IDisposable
     {
         if (_disposed || FloorState != null) return;
         DalamudService.Log.Debug("Buddy.Enable");
-        var playerPos = DalamudService.ClientState.LocalPlayer?.Position;
+        var playerPos = DalamudService.ObjectTable.LocalPlayer?.Position;
         if (playerPos.HasValue)
             _playerPosition = Plugin.RoundPos(playerPos.Value);
         DalamudService.ChatGui.ChatMessage += OnChatMessage;
@@ -341,7 +341,7 @@ public class Buddy : IDisposable
     // Force elements to update after changing settings
     public void ForceUpdate()
     {
-        if (DalamudService.ClientState.LocalPlayer == null) return;
+        if (DalamudService.ObjectTable.LocalPlayer == null) return;
         if (FloorState == null) return;
 
         _forceUpdate = true;
@@ -402,7 +402,7 @@ public class Buddy : IDisposable
 
     private void OnFrameworkUpdate(IFramework framework)
     {
-        if (DalamudService.ClientState.LocalPlayer == null) return;
+        if (DalamudService.ObjectTable.LocalPlayer == null) return;
         if (FloorState == null) return;
 
         // Handle toggling options on/off
@@ -423,7 +423,7 @@ public class Buddy : IDisposable
                 Plugin.CircleRenderer.RemoveTemporaryElements("ChestLabel");
         }
 
-        var localPlayer = DalamudService.ClientState.LocalPlayer!;
+        var localPlayer = DalamudService.ObjectTable.LocalPlayer!;
 
         var targetId = localPlayer.TargetObjectId;
         var target = localPlayer.TargetObject;
