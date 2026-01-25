@@ -79,7 +79,7 @@ public partial class ConfigWindow : Window, IDisposable
         }
         catch (Exception ex)
         {
-            DalamudService.Log.Error(ex, "Draw");
+            DalamudService.Log.Error(ex, "ConfigWindow.Draw");
         }
     }
 

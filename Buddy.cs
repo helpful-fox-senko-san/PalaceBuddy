@@ -311,6 +311,9 @@ public class Buddy : IDisposable
         DalamudService.Framework.Update -= OnFrameworkUpdate;
         FloorState = null;
         CachedLocationList = null;
+
+        // One last call to ensure the map addon gets reset if possible
+        Plugin.MapAddonHelper.Update();
     }
 
     // Load the trap list and hand it off to the circle renderer

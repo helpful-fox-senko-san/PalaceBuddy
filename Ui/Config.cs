@@ -35,14 +35,14 @@ public partial class ConfigWindow : Window, IDisposable
         }
         DrawHelpText("Display known trap locations inside of deep dungeons.");
 
-        b = Plugin.Configuration.ShowSightedTraps;
-        if (ImGui.Checkbox("Show Sighted Traps", ref b))
+        b = Plugin.Configuration.ShowUnrevealedMap;
+        if (ImGui.Checkbox("Show All Rooms On Map", ref b))
         {
-            Plugin.Configuration.ShowSightedTraps = b;
+            Plugin.Configuration.ShowUnrevealedMap = b;
             Plugin.Configuration.Save();
             Plugin.Buddy.ForceUpdate();
         }
-        DrawHelpText("Continue to indicate traps revealed by a pomander of sight.");
+        DrawHelpText("Display a dimmed version of the full deep dungeon map.\nNote: Chests will not be displayed until a room is revealed.");
 
         b = Plugin.Configuration.MarkChestContents;
         if (ImGui.Checkbox("Mark Chest Contents", ref b))
@@ -89,6 +89,41 @@ public partial class ConfigWindow : Window, IDisposable
         }
         ImGui.SameLine(102.0f * ImGuiHelpers.GlobalScale);
         ImGui.Text("Draw Distance");
+
+        b = Plugin.Configuration.ShowSightedTraps;
+        if (ImGui.Checkbox("Show Sighted Traps", ref b))
+        {
+            Plugin.Configuration.ShowSightedTraps = b;
+            Plugin.Configuration.Save();
+            Plugin.Buddy.ForceUpdate();
+        }
+        DrawHelpText("Continue to indicate traps revealed by a pomander of sight.");
+
+        ImGui.Separator();
+
+        ImGui.Text("Minimap Appearance");
+
+        f = Plugin.Configuration.MapRoomTint.W;
+        ImGui.SetNextItemWidth(90.0f * ImGuiHelpers.GlobalScale);
+        if (ImGui.SliderFloat("##Map Opacity", ref f, 0.4f, 0.8f, "%.2f"))
+        {
+            Plugin.Configuration.MapRoomTint = Plugin.Configuration.MapRoomTint with { W = f };
+            Plugin.Configuration.Save();
+            Plugin.Buddy.ForceUpdate();
+        }
+        ImGui.SameLine(102.0f * ImGuiHelpers.GlobalScale);
+        ImGui.Text("Room Opacity");
+
+        vec4 = Plugin.Configuration.MapRoomTint;
+        if (ImGui.ColorEdit4("##Room Color", ref vec4,
+            ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.DisplayRgb | ImGuiColorEditFlags.DisplayHex | ImGuiColorEditFlags.DisplayMask | ImGuiColorEditFlags.NoAlpha))
+        {
+            Plugin.Configuration.MapRoomTint = vec4;
+            Plugin.Configuration.Save();
+            Plugin.Buddy.ForceUpdate();
+        }
+        ImGui.SameLine(102.0f * ImGuiHelpers.GlobalScale);
+        ImGui.Text("Room Color Tint");
 
         ImGui.Separator();
 

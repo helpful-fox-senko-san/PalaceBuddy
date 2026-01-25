@@ -19,8 +19,10 @@ public sealed class Plugin : IDalamudPlugin
     public static LocationLoader LocationLoader { get; private set; } = null!;
     public static CircleRenderer CircleRenderer { get; private set; } = null!;
     public static GameScanner GameScanner { get; private set; } = null!;
+    public static MapAddonHelper MapAddonHelper { get; private set; } = null!;
 
     public static ConfigWindow ConfigWindow { get; private set; } = null!;
+    public static MapWindow MapWindow { get; private set; } = null!;
 
     public static ushort OverrideTerritory { get; set; }
     public static bool IsOverrideTerritory => OverrideTerritory != 0;
@@ -55,9 +57,12 @@ public sealed class Plugin : IDalamudPlugin
         LocationLoader = new LocationLoader();
         CircleRenderer = new CircleRenderer();
         GameScanner = new GameScanner();
+        MapAddonHelper = new MapAddonHelper();
 
         ConfigWindow = new ConfigWindow();
+        MapWindow = new MapWindow();
         WindowSystem.AddWindow(ConfigWindow);
+        WindowSystem.AddWindow(MapWindow);
 
         DalamudService.CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
