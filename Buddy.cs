@@ -7,6 +7,7 @@ using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility;
+using FFXIVClientStructs.FFXIV.Client.Game.Event;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using Lumina.Excel.Sheets;
 
@@ -100,6 +101,19 @@ public class Buddy : IDisposable
 
     // DeepDungeonTracker/Common/NodeUtility.cs
     private static readonly Regex NumberRegex = new Regex("\\d+");
+
+    private static unsafe (bool, int) ContentFloorNumber()
+    {
+        var eventFramework = EventFramework.Instance();
+        if (eventFramework == null)
+            return (false, -1);
+
+        var instanceContent = eventFramework->GetInstanceContentDeepDungeon();
+        if (instanceContent == null)
+            return (false, -1);
+
+        return (true, instanceContent->Floor);
+    }
 
     private static unsafe (bool, int) MapFloorNumber()
     {
@@ -360,10 +374,18 @@ public class Buddy : IDisposable
 
     private void CheckMapFloorNow()
     {
+        var (contentFloorResult, contentFloorNum) = ContentFloorNumber();
+        if (contentFloorResult)
+        {
+            DalamudService.Log.Debug($"Retrieved map floor number via content director: {contentFloorNum}");
+            OnFloorChangeMessage(contentFloorNum);
+            return;
+        }
+
         var (mapFloorResult, mapFloorNum) = MapFloorNumber();
         if (mapFloorResult)
         {
-            DalamudService.Log.Debug($"Retrieved map floor number: {mapFloorNum}");
+            DalamudService.Log.Debug($"Retrieved map floor number via addon: {mapFloorNum}");
             OnFloorChangeMessage(mapFloorNum);
         }
     }
