@@ -13,7 +13,7 @@ public sealed class Plugin : IDalamudPlugin
     private const string CommandName = "/pbud";
 
     public static Configuration Configuration { get; private set; } = null!;
-    public static WindowSystem WindowSystem = new("PalaceBuddy");
+    public static WindowSystem WindowSystem { get; private set; } = new("PalaceBuddy");
 
     public static Buddy Buddy { get; private set; } = null!;
     public static LocationLoader LocationLoader { get; private set; } = null!;
@@ -69,7 +69,7 @@ public sealed class Plugin : IDalamudPlugin
             ShowInHelp = false
         });
 
-        DalamudService.PluginInterface.UiBuilder.Draw += Draw;
+        DalamudService.PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
         DalamudService.PluginInterface.UiBuilder.OpenMainUi += OpenMainUi;
 
         if (DalamudService.PluginInterface.Reason == PluginLoadReason.Reload)
@@ -84,6 +84,7 @@ public sealed class Plugin : IDalamudPlugin
     public void Dispose()
     {
         WindowSystem.RemoveAllWindows();
+        DalamudService.PluginInterface.UiBuilder.Draw -= WindowSystem.Draw;
 
         ConfigWindow.Dispose();
 
@@ -92,11 +93,6 @@ public sealed class Plugin : IDalamudPlugin
 
         DalamudService.CommandManager.RemoveHandler(CommandName);
         ECommonsMain.Dispose();
-    }
-
-    private static void Draw()
-    {
-        WindowSystem.Draw();
     }
 
     public static void OpenMainUi()

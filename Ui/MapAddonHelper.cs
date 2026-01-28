@@ -23,12 +23,10 @@ public partial class MapAddonHelper
     {
         try
         {
-            var safeAddon = DalamudService.GameGui.GetAddonByName("DeepDungeonMap");
+            var addon = DalamudService.GameGui.GetAddonByName<AtkUnitBase>("DeepDungeonMap");
             
-            if (safeAddon.IsNull)
+            if (addon == null)
                 return;
-
-            AtkUnitBase* addon = (AtkUnitBase*)safeAddon.Address;
 
             Visible = addon->IsVisible;
             

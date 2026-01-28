@@ -1,5 +1,4 @@
 using Dalamud.Interface.Windowing;
-using Dalamud.Interface.Utility.Raii;
 using Dalamud.Bindings.ImGui;
 using System;
 using System.Numerics;
@@ -13,8 +12,6 @@ namespace PalaceBuddy.Ui;
 // This draws a ghost version of unrevealed rooms over the deep dungeon map
 public partial class MapWindow : Window
 {
-    private bool _initialized = false;
-
     private ISharedImmediateTexture _roomTex;
     private ISharedImmediateTexture _passageTex;
     private ISharedImmediateTexture _passageOpenTex;
@@ -131,14 +128,14 @@ public partial class MapWindow : Window
         // Top-left corner of our re-centered map
         float mapOffX = (Plugin.MapAddonHelper.MapSize.X - mapCols * roomSizeX) / 2;
         float mapOffY = (Plugin.MapAddonHelper.MapSize.Y - mapRows * roomSizeY) / 2;
-        
-        // Always request all of these textures to avoid flicker
+
+        // Always request both versions of the icon textures to avoid flicker
         var roomTexWrap = _roomTex.GetWrapOrEmpty();
         var passageWrap = _passageTex.GetWrapOrEmpty();
         var passageOpenWrap = _passageOpenTex.GetWrapOrEmpty();
         var returnWrap = _returnTex.GetWrapOrEmpty();
         var returnOpenWrap = _returnOpenTex.GetWrapOrEmpty();
-        
+
         // Actually draw the unrevealed tiles, mimicing the game's appearance
         for (int i = 0; i < 25; ++i)
         {
@@ -159,8 +156,7 @@ public partial class MapWindow : Window
             var tileUv = new Vector2(tilesetX / 192f, tilesetY / 192f);
             var tileUv2 = new Vector2((tilesetX + 44f) / 192f, (tilesetY + 44f) / 192f);
 
-            var tint = new Vector4(Plugin.Configuration.MapRoomTint.W);
-            tint *= Plugin.Configuration.MapRoomTint;
+            var tint = Plugin.Configuration.MapRoomTint;
 
             var tilePos = new Vector2(
                 mapOffX - (mapMinX - roomX) * roomSizeX,
