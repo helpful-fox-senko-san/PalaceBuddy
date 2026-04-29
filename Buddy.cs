@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Text.RegularExpressions;
+using Dalamud.Game.Chat;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Plugin.Services;
@@ -68,8 +69,6 @@ public class Buddy : IDisposable
     private Vector3 _playerPosition;
     private bool _forceUpdate;
     private bool _trapLocationsEnabled;
-
-    private const ushort DeepDungeonChatTypeId = 2105; // XivChatType
 
     private const int PassageLogMessageId = 7245; // The ### is activated!
     private const int FloorLogMessageId = 7270; // Floor ##
@@ -393,11 +392,11 @@ public class Buddy : IDisposable
         }
     }
 
-    private void OnChatMessage(XivChatType type, int timestamp, ref SeString sender, ref SeString message, ref bool isHandled)
+    private void OnChatMessage(IHandleableChatMessage message)
     {
-        if ((ushort)type != DeepDungeonChatTypeId) return;
-
-        var msg = message.TextValue;
+        // SourceKind=LocalPlayer, TargetKind=None
+        if (message.LogKind != XivChatType.SystemMessage) return;
+        var msg = message.Message.TextValue;
 
         if (msg == _transferMessage) OnTransferMessage();
         else if (msg == _introMessage) OnIntroMessage();
@@ -546,8 +545,8 @@ public class Buddy : IDisposable
 
         // No traps on boss floors
         bool isBossFloor = (floor % 10 == 0)
-            || (Plugin.TerritoryType == (ushort)ETerritoryType.EurekaOrthos_91_100 && floor == 99)
-            || (Plugin.TerritoryType == (ushort)ETerritoryType.PilgrimsTraverse_91_100 && floor == 99);
+            || (Plugin.TerritoryType == (uint)ETerritoryType.EurekaOrthos_91_100 && floor == 99)
+            || (Plugin.TerritoryType == (uint)ETerritoryType.PilgrimsTraverse_91_100 && floor == 99);
 
         FloorState.BossFloor = isBossFloor;
 
@@ -641,7 +640,7 @@ public class Buddy : IDisposable
     }
 
     // TerritoryKind=31 for deep dungeon
-    internal void OnTerritoryChanged(ushort territoryType)
+    internal void OnTerritoryChanged(uint territoryType)
     {
         DalamudService.Log.Debug("Buddy.OnTerritoryChanged");
         if (DDTerritoryTypes.Contains((ETerritoryType)territoryType))

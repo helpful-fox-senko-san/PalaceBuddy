@@ -1,7 +1,7 @@
 namespace PalaceBuddy;
 
 // PalacePal/Pal.Common/ETerritoryType.cs
-public enum ETerritoryType : ushort
+public enum ETerritoryType : uint
 {
     Palace_1_10 = 561,
     Palace_11_20,

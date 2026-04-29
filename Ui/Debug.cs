@@ -36,9 +36,9 @@ public partial class ConfigWindow : Window, IDisposable
 
                 foreach (ETerritoryType zone in Enum.GetValues<ETerritoryType>())
                 {
-                    if (ImGui.Selectable($"#{(ushort)zone} {zone}", Plugin.OverrideTerritory == (ushort)zone))
+                    if (ImGui.Selectable($"#{(uint)zone} {zone}", Plugin.OverrideTerritory == (uint)zone))
                     {
-                        Plugin.OverrideTerritory = (ushort)zone;
+                        Plugin.OverrideTerritory = (uint)zone;
                         Plugin.Buddy.OnTerritoryChanged(Plugin.TerritoryType);
                     }
                 }

@@ -51,7 +51,7 @@ public class LocationLoader
         return tcs.Task;
     }
 
-    public Task<List<Vector3>> GetLocationsForTerritory(int territoryType)
+    public Task<List<Vector3>> GetLocationsForTerritory(uint territoryType)
     {
         var tcs = new TaskCompletionSource<List<Vector3>>();
 
@@ -67,7 +67,7 @@ public class LocationLoader
                 {
                     var data = line.Split(',');
                     if (data.Length < 4) continue;
-                    if (int.Parse(data[0]) == territoryType)
+                    if (uint.Parse(data[0]) == territoryType)
                     {
                         result.Add(new(
                             float.Parse(data[1]),

@@ -9,5 +9,6 @@
     "potd",
     "hoh"
   ],
+  "DalamudApiLevel": 15,
   "IconUrl": "https://raw.githubusercontent.com/helpful-fox-senko-san/PalaceBuddy/master/Resources/icon.png"
 }

@@ -24,9 +24,9 @@ public sealed class Plugin : IDalamudPlugin
     public static ConfigWindow ConfigWindow { get; private set; } = null!;
     public static MapWindow MapWindow { get; private set; } = null!;
 
-    public static ushort OverrideTerritory { get; set; }
+    public static uint OverrideTerritory { get; set; }
     public static bool IsOverrideTerritory => OverrideTerritory != 0;
-    public static ushort TerritoryType =>
+    public static uint TerritoryType =>
         IsOverrideTerritory ? OverrideTerritory : DalamudService.ClientState.TerritoryType;
 
     public static Vector3 RoundPos(Vector3 pos)
